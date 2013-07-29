@@ -40,7 +40,9 @@ foreach ($servers as $server): ?>
 			<?php // if ($server['Server']['push']) echo $this->Form->postLink(__('Push'), array('action' => 'push', $server['Server']['id']) ); ?>
 
 			<?php if ($server['Server']['pull'] && $me['org'] == 'ADMIN') echo $this->Form->postLink(__('Pull All'), array('action' => 'pull', $server['Server']['id'], 'full'), array('class' => 'btn') ); ?>
-			<?php if ($server['Server']['push'] && $me['org'] == 'ADMIN') echo $this->Form->postLink(__('Push All'), array('action' => 'push', $server['Server']['id'], 'full'), array('class' => 'btn') ); ?>
+			<?php if ($server['Server']['push'] && $me['org'] == 'ADMIN') echo $this->Form->postLink(__('Push All'), array('action' => 'push', $server['Server']['id'], 'full'), array('class' => 'btn') ); 
+			echo $this->Form->postLink(__('Push All TAXII'), array('action' => 'taxii_push', $server['Server']['id'], 'full'), array('class' => 'btn') );
+			?>
 		</td>
 	</tr>
 	<?php

@@ -23,6 +23,14 @@ Click this to download all network related attributes that you have access to un
 </tr>
 <tr>
 <td class="actions" style="text-align:center;">
+<ul><li><?php echo $this->Html->link(__('Download SNORT Rules', true), array('action' => 'snort', 'download')); ?></li></ul>
+</td>
+<td>
+Click this to download all network related attributes that you have access to under the Snort rule format. Only <em>published</em> events and attributes marked as <em>IDS Signature</em> are exported. Administration is able to maintain a whitelist containing host, domain name and IP numbers to exclude from the NIDS export.
+</td>
+</tr>
+<tr>
+<td class="actions" style="text-align:center;">
 <ul><li><?php echo $this->Html->link(__('Download all MD5 hashes', true), array('action' => 'hids', 'md5','download')); ?> </li></ul>
 <ul><li><?php echo $this->Html->link(__('Download all SHA1 hashes', true), array('action' => 'hids', 'sha1','download')); ?> </li></ul>
 </td>

@@ -17,7 +17,7 @@ class NidsExportComponent extends Component {
 		$this->rules[] = '# ';
 	}
 
-	public function export($items, $startSid) {
+	public function export($items, $startSid, $toSnort) {
 		$this->Whitelist = ClassRegistry::init('Whitelist');
 		$this->whitelist = $this->Whitelist->populateWhitelist();
 
@@ -44,7 +44,12 @@ class NidsExportComponent extends Component {
 			# proto src_ip src_port direction dst_ip dst_port msg rule_content tag sid rev
 			$ruleFormatMsg = 'msg: "' . Configure::read('CyDefSIG.name') . ' e' . $item['Event']['id'] . ' %s"';
 			$ruleFormatReference = 'reference:url,' . Configure::read('CyDefSIG.baseurl') . '/events/view/' . $item['Event']['id'];
-			$ruleFormat = '%salert %s %s %s %s %s %s (' . $ruleFormatMsg . '; %s %s classtype:' . $this->classtype . '; sid:%d; rev:%d; priority:' . $priority . '; ' . $ruleFormatReference . ';) ';
+			if($toSnort){
+				$ruleFormat = '%salert %s %s %s %s %s %s (' . $ruleFormatMsg . '; %s %s classtype:' . $this->classtype . '; priority:' . $priority . '; ' . $ruleFormatReference . ';) ';
+			}else{
+				$ruleFormat = '%salert %s %s %s %s %s %s (' . $ruleFormatMsg . '; %s %s classtype:' . $this->classtype . '; sid:%d; rev:%d; priority:' . $priority . '; ' . $ruleFormatReference . ';) ';
+				
+			}
 
 			$sid = $startSid + ($item['Attribute']['id'] * 10); // leave 9 possible rules per attribute type
 			$attribute = &$item['Attribute'];
@@ -55,10 +60,10 @@ class NidsExportComponent extends Component {
 				// LATER nids - add the tag keyword in the rules to capture network traffic
 				// LATER nids - sanitize every $attribute['value'] to not conflict with snort
 				case 'ip-dst':
-					$this->ipDstRule($ruleFormat, $attribute, $sid);
+					$this->ipDstRule($ruleFormat, $attribute, $sid, $toSnort);
 					break;
 				case 'ip-src':
-					$this->ipSrcRule($ruleFormat, $attribute, $sid);
+					$this->ipSrcRule($ruleFormat, $attribute, $sid, $toSnort);
 					break;
 				case 'email-src':
 					$this->emailSrcRule($ruleFormat, $attribute, $sid);
@@ -73,13 +78,13 @@ class NidsExportComponent extends Component {
 					$this->emailAttachmentRule($ruleFormat, $attribute, $sid);
 					break;
 				case 'domain':
-					$this->domainRule($ruleFormat, $attribute, $sid);
+					$this->domainRule($ruleFormat, $attribute, $sid, $toSnort);
 					break;
 				case 'hostname':
-					$this->hostnameRule($ruleFormat, $attribute, $sid);
+					$this->hostnameRule($ruleFormat, $attribute, $sid, $toSnort);
 					break;
 				case 'url':
-					$this->urlRule($ruleFormat, $attribute, $sid);
+					$this->urlRule($ruleFormat, $attribute, $sid, $toSnort);
 					break;
 				case 'user-agent':
 					$this->userAgentRule($ruleFormat, $attribute, $sid);
@@ -95,9 +100,24 @@ class NidsExportComponent extends Component {
 		return $this->rules;
 	}
 
-	public function ipDstRule($ruleFormat, $attribute, &$sid) {
+	public function ipDstRule($ruleFormat, $attribute, &$sid, $toSnort) {
 		$overruled = in_array($attribute['value'], $this->whitelist);
-		$this->rules[] = sprintf($ruleFormat,
+
+		if($toSnort){
+			$this->rules[] = sprintf($ruleFormat,
+				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
+				'ip',							// proto
+				'$HOME_NET',					// src_ip
+				'any',							// src_port
+				'->',							// direction
+				$attribute['value'],			// dst_ip
+				'any',							// dst_port
+				'Outgoing To IP: ' . $attribute['value'],		// msg
+				'',							// rule_content
+				''							// tag
+				);
+		}else{
+			$this->rules[] = sprintf($ruleFormat,
 				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
 				'ip',							// proto
 				'$HOME_NET',					// src_ip
@@ -111,11 +131,27 @@ class NidsExportComponent extends Component {
 				$sid,							// sid
 				1								// rev
 				);
+		}
 	}
 
-	public function ipSrcRule($ruleFormat, $attribute, &$sid) {
+	public function ipSrcRule($ruleFormat, $attribute, &$sid, $toSnort) {
 		$overruled = in_array($attribute['value'], $this->whitelist);
-		$this->rules[] = sprintf($ruleFormat,
+		
+		if($toSnort){
+			$this->rules[] = sprintf($ruleFormat,
+				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
+				'ip',							// proto
+				$attribute['value'],			// src_ip
+				'any',							// src_port
+				'->',							// direction
+				'$HOME_NET',					// dst_ip
+				'any',							// dst_port
+				'Incoming From IP: ' . $attribute['value'],		// msg
+				'',							// rule_content
+				''						// tag
+				);
+		}else{
+			$this->rules[] = sprintf($ruleFormat,
 				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
 				'ip',							// proto
 				$attribute['value'],			// src_ip
@@ -129,6 +165,7 @@ class NidsExportComponent extends Component {
 				$sid,							// sid
 				1								// rev
 				);
+		}
 	}
 
 	public function emailSrcRule($ruleFormat, $attribute, &$sid) {
@@ -205,7 +242,7 @@ class NidsExportComponent extends Component {
 				);
 	}
 
-	public function hostnameRule($ruleFormat, $attribute, &$sid) {
+	public function hostnameRule($ruleFormat, $attribute, &$sid, $toSnort) {
 		$overruled = in_array($attribute['value'], $this->whitelist);
 		$content = 'content:"' . $this->dnsNameToRawFormat($attribute['value'], 'hostname') . '"; nocase;';
 		$this->rules[] = sprintf($ruleFormat,
@@ -241,23 +278,38 @@ class NidsExportComponent extends Component {
 		// also do http requests
 		// warning: only suricata compatible
 		$content = 'flow:to_server,established; content: "Host: ' . $attribute['value'] . '"; nocase; http_header; pcre: "/[^A-Za-z0-9-]' . preg_quote($attribute['value']) . '[^A-Za-z0-9-]/";';
-		$this->rules[] = sprintf($ruleFormat,
-			($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
-				'http',						// proto
-				'$HOME_NET',					// src_ip
-				'any',							// src_port
-				'->',							// direction
-				'$EXTERNAL_NET',				// dst_ip
-				'any',							// dst_port
-				'Outgoing HTTP Hostname: ' . $attribute['value'],		// msg
-				$content,						// rule_content
-				'tag:session,600,seconds;',	// tag
-				$sid,							// sid
-				1								// rev
-		);
+		if($toSnort){
+			$this->rules[] = sprintf($ruleFormat,
+				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
+					'tcp',						// proto
+					'$HOME_NET',					// src_ip
+					'any',							// src_port
+					'->',							// direction
+					'$EXTERNAL_NET',				// dst_ip
+					'$HTTP_PORTS',							// dst_port
+					'Outgoing HTTP Hostname: ' . $attribute['value'],		// msg
+					$content,						// rule_content
+					'tag:session,600,seconds;'	// tag
+			);
+		}else{
+			$this->rules[] = sprintf($ruleFormat,
+				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
+					'http',						// proto
+					'$HOME_NET',					// src_ip
+					'any',							// src_port
+					'->',							// direction
+					'$EXTERNAL_NET',				// dst_ip
+					'any',							// dst_port
+					'Outgoing HTTP Hostname: ' . $attribute['value'],		// msg
+					$content,						// rule_content
+					'tag:session,600,seconds;',	// tag
+					$sid,							// sid
+					1								// rev
+			);
+		}
 	}
 
-	public function domainRule($ruleFormat, $attribute, &$sid) {
+	public function domainRule($ruleFormat, $attribute, &$sid, $toSnort) {
 		$overruled = in_array($attribute['value'], $this->whitelist);
 		$content = 'content:"' . $this->dnsNameToRawFormat($attribute['value']) . '"; nocase;';
 		$this->rules[] = sprintf($ruleFormat,
@@ -293,29 +345,58 @@ class NidsExportComponent extends Component {
 		// also do http requests,
 		// warning: only suricata compatible
 		$content = 'flow:to_server,established; content: "Host:"; nocase; http_header; content:"' . $attribute['value'] . '"; nocase; http_header; pcre: "/[^A-Za-z0-9-]' . preg_quote($attribute['value']) . '[^A-Za-z0-9-]/";';
-		$this->rules[] = sprintf($ruleFormat,
-			($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
-				'http',						// proto
-				'$HOME_NET',					// src_ip
-				'any',							// src_port
-				'->',							// direction
-				'$EXTERNAL_NET',				// dst_ip
-				'any',							// dst_port
-				'Outgoing HTTP Domain: ' . $attribute['value'],		// msg
-				$content,						// rule_content
-				'tag:session,600,seconds;',	// tag
-				$sid,							// sid
-				1								// rev
-		);
+		if($toSnort){
+				$this->rules[] = sprintf($ruleFormat,
+				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
+					'tcp',						// proto
+					'$HOME_NET',					// src_ip
+					'any',							// src_port
+					'->',							// direction
+					'$EXTERNAL_NET',				// dst_ip
+					'$HTTP_PORTS',							// dst_port
+					'Outgoing HTTP Domain: ' . $attribute['value'],		// msg
+					$content,						// rule_content
+					'tag:session,600,seconds;'	// tag
+			);
+		}else{
+			$this->rules[] = sprintf($ruleFormat,
+				($overruled) ? '#OVERRULED BY WHITELIST# ' : '',
+					'http',						// proto
+					'$HOME_NET',					// src_ip
+					'any',							// src_port
+					'->',							// direction
+					'$EXTERNAL_NET',				// dst_ip
+					'any',							// dst_port
+					'Outgoing HTTP Domain: ' . $attribute['value'],		// msg
+					$content,						// rule_content
+					'tag:session,600,seconds;',	// tag
+					$sid,							// sid
+					1								// rev
+			);
+		}
 	}
 
-	public function urlRule($ruleFormat, $attribute, &$sid) {
+	public function urlRule($ruleFormat, $attribute, &$sid, $toSnort) {
 		// TODO in hindsight, an url should not be excluded given a host or domain name.
 		//$hostpart = parse_url($attribute['value'], PHP_URL_HOST);
 		//$overruled = $this->checkNames($hostpart);
 		// warning: only suricata compatible
 		$content = 'flow:to_server,established; content:"' . $attribute['value'] . '"; nocase; http_uri;';
-		$this->rules[] = sprintf($ruleFormat,
+		if($toSnort){
+			$this->rules[] = sprintf($ruleFormat,
+				(false) ? '#OVERRULED BY WHITELIST# ' : '',
+				'tcp',							// proto
+				'$HOME_NET',					// src_ip
+				'any',							// src_port
+				'->',							// direction
+				'$EXTERNAL_NET',				// dst_ip
+				'$HTTP_PORTS',							// dst_port
+				'Outgoing HTTP URL: ' . $attribute['value'],		// msg
+				$content,						// rule_content
+				'tag:session,600,seconds;'	// tag
+				);
+		}else{
+			$this->rules[] = sprintf($ruleFormat,
 				(false) ? '#OVERRULED BY WHITELIST# ' : '',
 				'http',							// proto
 				'$HOME_NET',					// src_ip
@@ -329,6 +410,7 @@ class NidsExportComponent extends Component {
 				$sid,							// sid
 				1								// rev
 				);
+		}
 	}
 
 	public function userAgentRule($ruleFormat, $attribute, &$sid) {

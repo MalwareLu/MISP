@@ -1354,6 +1354,54 @@ class EventsController extends AppController {
         $this->set('rules', $rules);
     }
 
+    public function snort($key) {
+        if ($key != 'download') {
+            $this->response->type('txt');   // set the content type
+            $this->header('Content-Disposition: inline; filename="misp.rules"');
+            $this->layout = 'text/default';
+            // check if the key is valid -> search for users based on key
+            $user = $this->checkAuthUser($key);
+            if (!$user) {
+                throw new UnauthorizedException('This authentication key is not authorized to be used for exports. Contact your administrator.');
+            }
+        } else {
+            //$this->autoRender = false;
+            $this->response->type('txt');   // set the content type
+            $this->header('Content-Disposition: download; filename="misp.nids.rules"');
+            $this->layout = 'text/default';
+            // check if there's a user logged in or not
+            if (!$this->Auth->user('id')) {
+                throw new UnauthorizedException('You have to be logged in to do that.');
+            }
+            $user = $this->Auth->user;
+        }
+
+        // display the full snort rulebase
+        $this->loadModel('Attribute');
+
+        //restricting to non-private or same org if the user is not a site-admin.
+        $conditions['AND'] = array('Attribute.to_ids' => 1, "Event.published" => 1);
+        if (!$this->_isSiteAdmin()) {
+            $temp = array();
+            $distribution = array();
+            array_push($distribution, array('Attribute.private =' => 0));
+            array_push($distribution, array('Attribute.cluster =' => 1));
+            array_push($temp, array('OR' => $distribution));
+            array_push($temp, array('(SELECT events.org FROM events WHERE events.id = Attribute.event_id) LIKE' => $this->_checkOrg()));
+            $conditions['OR'] = $temp;
+        }
+
+        $params = array(
+                'conditions' => $conditions, //array of conditions
+                'recursive' => 0, //int
+                'group' => array('Attribute.type', 'Attribute.value1'), //fields to GROUP BY
+        );
+        $items = $this->Attribute->find('all', $params);
+
+        $rules = $this->NidsExport->export($items, $user['User']['nids_sid'], 1);
+        $this->set('rules', $rules);
+    }
+
     public function hids($type, $key) {
 
         if ($key != 'download') {

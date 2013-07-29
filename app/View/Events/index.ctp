@@ -56,7 +56,9 @@ foreach ($events as $event):?>
             echo $this->Html->image('no.png', array('title' => 'Not validated', 'alt' => 'Not Validated', 'width' => '16', 'hight' => '16'));
     }?>
         &nbsp;</td>-->
-
+        <?php
+        //die(debug($this->request->webroot));
+        ?>
         <td>
         <?php echo $this->Html->link($event['Event']['id'], array('controller' => 'events', 'action' => 'view', $event['Event']['id'])); ?>
         &nbsp;</td>
