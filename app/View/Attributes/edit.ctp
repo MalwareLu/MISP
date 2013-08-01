@@ -1,6 +1,3 @@
-<?php
-$mayModify = (($isAclModify && $attribute['Event']['user_id'] == $me['id']) || ($isAclModifyOrg && $attribute['Event']['org'] == $me['org']));
-?>
 <div class="attributes form">
 <?php echo $this->Form->create('Attribute');?>
 	<fieldset>
@@ -15,11 +12,11 @@ if ($attachment) {
 	echo $this->Form->input('type', array('between' => $this->Html->div('forminfo', '', array('id' => 'AttributeTypeDiv'))));
 }
 if ('true' == Configure::read('CyDefSIG.sync')) {
-	if ('true' == $canEditDist) {
-		echo $this->Form->input('distribution', array('label' => 'Distribution',
-			'between' => $this->Html->div('forminfo', '', array('id' => 'AttributeDistributionDiv'))
-		));
-	}
+	
+	echo $this->Form->input('distribution', array('label' => 'Distribution',
+		'between' => $this->Html->div('forminfo', '', array('id' => 'AttributeDistributionDiv'))
+	));
+	
 }
 echo $this->Form->input('to_ids', array(
 			'before' => $this->Html->div('forminfo', isset($attrDescriptions['signature']['formdesc']) ? $attrDescriptions['signature']['formdesc'] : $attrDescriptions['signature']['desc']),
@@ -45,9 +42,8 @@ echo $this->Form->input('vulnerability_management', array('type' => 'checkbox'))
 
 $this->Js->get('#AttributeCategory')->event('change', 'formCategoryChanged("#AttributeCategory")');
 $this->Js->get('#AttributeType')->event('change', 'showFormInfo("#AttributeType")');
-if ($canEditDist) {
-	$this->Js->get('#AttributeDistribution')->event('change', 'showFormInfo("#AttributeDistribution")');
-}
+$this->Js->get('#AttributeDistribution')->event('change', 'showFormInfo("#AttributeDistribution")');
+
 ?>
 	</fieldset>
 <?php echo $this->Form->button(__('Submit'), array('class' => 'btn btn-primary'));
@@ -109,26 +105,51 @@ foreach ($distributionDescriptions as $type => $def) {
 }
 ?>
 
-function showFormInfo(id) {
-	idDiv = id+'Div';
-	// LATER use nice animations
-	//$(idDiv).hide('fast');
-	// change the content
-	var value = $(id).val();	// get the selected value
-	$(idDiv).html(formInfoValues[value]);	// search in a lookup table
+$(document).ready(function() {
 
-	// show it again
-	$(idDiv).fadeIn('slow');
-}
+	$("#AttributeType, #AttributeCategory, #Attribute, #AttributeDistribution").on('mouseleave', function(e) {
+	    $('#'+e.currentTarget.id).popover('destroy');
+	});
 
-//hide the formInfo things
-$('#AttributeTypeDiv').hide();
-$('#AttributeCategoryDiv').hide();
-$('#AttributeDistributionDiv').hide();
-// fix the select box based on what was selected
-var type_value = $('#AttributeType').val();
-formCategoryChanged("#AttributeCategory");
-$('#AttributeType').val(type_value);
+	$("#AttributeType, #AttributeCategory, #Attribute, #AttributeDistribution").on('mouseover', function(e) {
+	    var $e = $(e.target);
+	    if ($e.is('option')) {
+	        $('#'+e.currentTarget.id).popover('destroy');
+	        $('#'+e.currentTarget.id).popover({
+	            trigger: 'manual',
+	            placement: 'right',
+	            content: formInfoValues[$e.val()],
+	        }).popover('show');
+		}
+	});
+
+	$("input, label").on('mouseleave', function(e) {
+	    $('#'+e.currentTarget.id).popover('destroy');
+	});
+
+	$("input, label").on('mouseover', function(e) {
+		var $e = $(e.target);
+		$('#'+e.currentTarget.id).popover('destroy');
+        $('#'+e.currentTarget.id).popover({
+            trigger: 'manual',
+            placement: 'right',
+        }).popover('show');
+	});
+
+	// workaround for browsers like IE and Chrome that do now have an onmouseover on the 'options' of a select.
+	// disadvangate is that user needs to click on the item to see the tooltip.
+	// no solutions exist, except to generate the select completely using html.
+	$("#AttributeType, #AttributeCategory, #Attribute, #AttributeDistribution").on('change', function(e) {
+	    var $e = $(e.target);
+        $('#'+e.currentTarget.id).popover('destroy');
+        $('#'+e.currentTarget.id).popover({
+            trigger: 'manual',
+            placement: 'right',
+            content: formInfoValues[$e.val()],
+        }).popover('show');
+	});
+
+});
 
 </script>
 <?php echo $this->Js->writeBuffer(); // Write cached scripts

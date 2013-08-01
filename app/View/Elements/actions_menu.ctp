@@ -1,49 +1,74 @@
-		<h3><?php echo __('Event Actions'); ?></h3>
-		<li><?php
-if ($isAclAdd) echo $this->Html->link(__('New Event', true), array('controller' => 'events', 'action' => 'add')); ?></li>
-		<li><?php echo $this->Html->link(__('List Events', true), array('controller' => 'events', 'action' => 'index')); ?></li>
-		<li><?php echo $this->Html->link(__('List Attributes', true), array('controller' => 'attributes', 'action' => 'index')); ?> </li>
-		<li><?php echo $this->Html->link(__('Search Attributes', true), array('controller' => 'attributes', 'action' => 'search')); ?> </li>
-		<li><?php echo $this->Html->link(__('Export', true), array('controller' => 'events', 'action' => 'export')); ?> </li>
-		<li><?php
-if ($isAclAuth) echo $this->Html->link(__('Automation', true), array('controller' => 'events', 'action' => 'automation')); ?></li>
-		<!--<li>&nbsp;</li>
-		<h3><?php echo __('Global Actions'); ?></h3>
-		<li><?php echo $this->Html->link(__('News', true), array('controller' => 'users', 'action' => 'news')); ?> </li>
-		<li><?php echo $this->Html->link(__('My Profile', true), array('controller' => 'users', 'action' => 'view', 'me')); ?> </li>
-		<li><?php echo $this->Html->link(__('Members List', true), array('controller' => 'users', 'action' => 'memberslist')); ?> </li>
-		<li><?php echo $this->Html->link(__('User Guide', true), array('controller' => 'pages', 'action' => 'display', 'documentation')); ?> </li>
-		<li><?php echo $this->Html->link(__('Terms & Conditions', true), array('controller' => 'users', 'action' => 'terms')); ?> </li>
-		<li><?php echo $this->Html->link(__('Log out', true), array('controller' => 'users', 'action' => 'logout')); ?> </li>-->
+<?php
+if(empty($is_site_admin)) $is_site_admin = false;
+if(empty($may_modify)) $may_modify = false;
+if(empty($is_published)) $is_published = false;
+if(empty($is_admin)) $is_admin = false;
+if(empty($may_publish)) $may_publish = false;
+?>
+
+<div class="actions <?php echo $debugMode;?>">
+	<ul class="nav nav-list">
+		<?php if(!empty($event_id)) { ?>
+			<li><a href="/events/view/<?php echo $event_id;?>">View Event</a></li>
+			<li><a href="/logs/event_index/<?php echo $event_id;?>">View Event History</a></li>
+			<?php if($is_site_admin || $may_modify){?>
+				<li><a href="/events/edit/<?php echo $event_id;?>">Edit Event</a></li>
+				<li><?php echo $this->Form->postLink('Delete Event', array('action' => 'delete', $event_id), null, __('Are you sure you want to delete # %s?', $event_id)); ?></li>
+				<li class="divider"></li>
+				<li><a href="/attributes/add/<?php echo $event_id;?>">Add Attribute</a></li>
+				<li><a href="/attributes/add_attachment/<?php echo $event_id;?>">Add Attachment</a></li>
+				<li><a href="/events/addIOC/<?php echo $event_id;?>">Populate from IOC</a></li>
+				<li><a href="/attributes/add_threatconnect/<?php echo $event_id; ?>">Populate from ThreatConnect</a></li>
+			<?php }else{ ?>
+				<li><a href="/shadow_attributes/add/<?php echo $event_id;?>">Propose Attribute</a></li>
+				<li><a href="/shadow_attributes/add_attachment/<?php echo $event_id?>">Propose Attachment</a></li>
+			<?php } ?>
+			<?php if ( 0 == $is_published && ($is_admin || $may_publish)){ ?>
+				<li><?php echo $this->Form->postLink('Publish Event', array('action' => 'alert', $event_id), null, 'Are you sure this event is complete and everyone should be informed?'); ?></li>
+				<li><?php echo $this->Form->postLink('Publish (no email)', array('action' => 'publish', $event_id), null, 'Publish but do NOT send alert email? Only for minor changes!'); ?></li>
+			<?php } ?>
+			<li><a href="/events/contact/<?php echo $event_id;?>">Contact Reporter</a></li>
+			<li><?php echo $this->Html->link(__('Download as XML', true), array('action' => 'download', $event_id, 'ext' => 'xml')); ?></li>
+			<?php if(!empty($cimbl_id)){?>
+		    <li><?php echo $this->Html->link(__('Download CIMBL XML', true), array('controller' => 'CIMBLs', 'action' => 'download', $cimbl_id, 'ext' => 'xml')); ?></li>
+		    <?php } ?>
+			<?php if ($is_published){ ?>
+				<li><a href="/events/downloadOpenIOCEvent/<?php echo $event_id;?>">Download as IOC</a></li>
+				<li><?php echo $this->Html->link(__('Download CSV', true), array('action' => 'download', $event_id, 'ext' => 'csv')); ?></li>
+			<?php } ?>
+			<li class="divider"></li>
+		<?php } ?>
+
+		<?php if(!empty($user_id) && $can_i_edit){?>
+			<li><?php echo $this->Html->link(__('Edit User', true), array('action' => 'edit', $user['User']['id'])); ?></li>
+			<li class="divider"></li>
+		<?php } ?>
+
+		<li><a href="/events/index">List Events</a></li>
+		<?php if ($isAclAdd): ?>
+		<li><a href="/events/add">Add Event</a></li>
+		<?php endif; ?>
+		<li class="divider"></li>
+		<li><a href="/attributes/index">List Attributes</a></li>
+		<li><a href="/attributes/search">Search Attributes</a></li>
+		<li class="divider"></li>
+		<li><a href="/events/export">Export</a></li>
+		<?php if ($isAclAuth): ?>
+		<li><a href="/events/automation">Automation</a></li>
+		<?php endif;?>
+
+		<?php if(!empty($page) && $page == 'logs'){?>
+			<li clas="divider"></li>
+			<li><?php echo $this->Html->link('List Logs', array('admin' => true, 'action' => 'index'));?></li>
+			<li><?php echo $this->Html->link('Search Logs', array('admin' => true, 'action' => 'search'));?></li>
+		<?php } ?>
+	</ul>
+</div>
+
+
 
 		<?php
-if (('true' == Configure::read('CyDefSIG.sync')) && ($isAclSync || $isAdmin)): ?>
-		<!--<li>&nbsp;</li>
-		<h3><?php echo __('Sync Actions'); ?></h3>
-		<li><?php echo $this->Html->link(__('List Servers'), array('controller' => 'servers', 'action' => 'index'));?></li>-->
-        <?php
-endif;?>
-
-		<?php
-		//Site admin
-if($isSiteAdmin): ?>
-		<!--<li>&nbsp;</li>
-		<h3><?php echo __('Input Filters'); ?></h3>
-		<li><?php echo $this->Html->link(__('Import Blacklist', true), array('controller' => 'blacklists', 'action' => 'index', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('Import Regexp', true), array('controller' => 'regexp', 'action' => 'index', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('Signature Whitelist', true), array('controller' => 'whitelists', 'action' => 'index', 'admin' => true)); ?> </li>
-		<li>&nbsp;</li>
-		<h3><?php echo __('Administration'); ?></h3>
-		<li><?php echo $this->Html->link(__('New User', true), array('controller' => 'users', 'action' => 'add', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('List Users', true), array('controller' => 'users', 'action' => 'index', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('New Role', true), array('controller' => 'roles', 'action' => 'add', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('List Roles', true), array('controller' => 'roles', 'action' => 'index', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('Contact users', true), array('controller' => 'users', 'action' => 'email', 'admin' => true)); ?> </li>
-		<li>&nbsp;</li>-->
-		<?php
-endif;?>
-
-		<?php
+		// used? not used?
 		//org admin
 if($isAdmin && !$isSiteAdmin): ?>
 		<li>&nbsp;</li>
@@ -71,10 +96,3 @@ if(!$isSiteAdmin && !$isAclAdmin): ?>
 		<?php
 endif;?>
 
-		<?php
-if($isAclAudit): ?>
-		<!--<h3><?php echo __('Audit'); ?></h3>
-		<li><?php echo $this->Html->link(__('List Logs', true), array('controller' => 'logs', 'action' => 'index', 'admin' => true)); ?> </li>
-		<li><?php echo $this->Html->link(__('Search Logs', true), array('controller' => 'logs', 'action' => 'admin_search', 'admin' => true)); ?> </li>-->
-		<?php
-endif;

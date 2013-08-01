@@ -82,7 +82,6 @@ class AttributesController extends AppController {
  *
  * @return void
  *
- * @throws NotFoundException // TODO Exception
  */
     public function index() {
         $this->set('isSearch', 0);
@@ -93,16 +92,6 @@ class AttributesController extends AppController {
         $this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
         $this->set('typeDefinitions', $this->Attribute->typeDefinitions);
         $this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
-    }
-
-    public function view($id = null) {
-        $this->Attribute->id = $id;
-        if (!$this->Attribute->exists()) {
-            throw new NotFoundException(__('Invalid attribute'));
-        }
-        $this->Attribute->read(null, $id);
-
-        $this->set('attribute', $this->Attribute->data);
     }
 
 /**
@@ -308,161 +297,321 @@ class AttributesController extends AppController {
  * @return void
  * @throws InternalErrorException
  */
-    public function add_attachment($eventId = null) {
-        if ($this->request->is('post')) {
-            $this->loadModel('Event');
-            // Check if there were problems with the file upload
-            // only keep the last part of the filename, this should prevent directory attacks
-            $filename = basename($this->request->data['Attribute']['value']['name']);
-            $tmpfile = new File($this->request->data['Attribute']['value']['tmp_name']);
-            if ((isset($this->request->data['Attribute']['value']['error']) && $this->request->data['Attribute']['value']['error'] == 0) ||
-                    (!empty( $this->request->data['Attribute']['value']['tmp_name']) && $this->request->data['Attribute']['value']['tmp_name'] != 'none')
-            ) {
-                if (!is_uploaded_file($tmpfile->path))
-                    throw new InternalErrorException('PHP says file was not uploaded. Are you attacking me?');
-            } else {
-                $this->Session->setFlash(__('There was a problem to upload the file.', true), 'default', array(), 'error');
-                $this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
-            }
 
-            // remove the published flag from the event
-            $this->Event->id = $this->request->data['Attribute']['event_id'];
-            $this->Event->saveField('published', 0);
-            // save the file-info in the database
-            $this->Attribute->create();
-            if ($this->request->data['Attribute']['malware']) {
-                $this->request->data['Attribute']['type'] = "malware-sample";
-                // Validate filename
-                if (!preg_match('@^[\w-,\s]+\.[A-Za-z0-9_]{2,4}$@', $filename)) throw new Exception ('Filename not allowed');
-                $this->request->data['Attribute']['value'] = $filename . '|' . $tmpfile->md5(); // TODO gives problems with bigger files
-                $this->request->data['Attribute']['to_ids'] = 1; // LATER let user choose to send this to IDS
-            } else {
-                $this->request->data['Attribute']['type'] = "attachment";
-                // Validate filename
-                if (!preg_match('@^[\w-,\s]+\.[A-Za-z0-9_]{2,4}$@', $filename)) throw new Exception ('Filename not allowed');
-                $this->request->data['Attribute']['value'] = $filename;
-                $this->request->data['Attribute']['to_ids'] = 0;
-            }
-            $this->request->data['Attribute']['uuid'] = String::uuid();
-            $this->request->data['Attribute']['batch_import'] = 0;
+	public function add_attachment($eventId = null) {
+		$sha256 = null;
+		$sha1 = null;
+		//$ssdeep = null;
+		if ($this->request->is('post')) {
+			$this->loadModel('Event');
+			// Check if there were problems with the file upload
+			// only keep the last part of the filename, this should prevent directory attacks
+			$filename = basename($this->request->data['Attribute']['value']['name']);
+			$tmpfile = new File($this->request->data['Attribute']['value']['tmp_name']);
+			if ((isset($this->request->data['Attribute']['value']['error']) && $this->request->data['Attribute']['value']['error'] == 0) ||
+					(!empty( $this->request->data['Attribute']['value']['tmp_name']) && $this->request->data['Attribute']['value']['tmp_name'] != 'none')
+			) {
+				if (!is_uploaded_file($tmpfile->path))
+					throw new InternalErrorException('PHP says file was not uploaded. Are you attacking me?');
+			} else {
+				$this->Session->setFlash(__('There was a problem to upload the file.', true), 'default', array(), 'error');
+				$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+			}
 
-            if ($this->Attribute->save($this->request->data)) {
-                // attribute saved correctly in the db
-            } else {
-                $this->Session->setFlash(__('The attribute could not be saved. Did you already upload this file?'));
-                $this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
-            }
+			// save the file-info in the database
+			$this->Attribute->create();
+			if ($this->request->data['Attribute']['malware']) {
+				$this->request->data['Attribute']['type'] = "malware-sample";
+				// Validate filename
+				if (!preg_match('@^[\w-,\s]+\.[A-Za-z0-9_]{2,4}$@', $filename)) throw new Exception ('Filename not allowed');
+				$this->request->data['Attribute']['value'] = $filename . '|' . hash_file('md5', $tmpfile->path); // TODO gives problems with bigger files
+				$sha256 = (hash_file('sha256', $tmpfile->path));
+				$sha1 = (hash_file('sha1', $tmpfile->path));
+				$this->request->data['Attribute']['to_ids'] = 1; // LATER let user choose to send this to IDS
+			} else {
+				$this->request->data['Attribute']['type'] = "attachment";
+				// Validate filename
+				if (!preg_match('@^[\w-,\s]+\.[A-Za-z0-9_]{2,4}$@', $filename)) throw new Exception ('Filename not allowed');
+				$this->request->data['Attribute']['value'] = $filename;
+				$this->request->data['Attribute']['to_ids'] = 0;
+			}
+			$this->request->data['Attribute']['uuid'] = String::uuid();
+			$this->request->data['Attribute']['batch_import'] = 0;
 
-            // no errors in file upload, entry already in db, now move the file where needed and zip it if required.
-            // no sanitization is required on the filename, path or type as we save
-            // create directory structure
-            if (PHP_OS == 'WINNT') {
-                $rootDir = APP . "files" . DS . $this->request->data['Attribute']['event_id'];
-            } else {
-                $rootDir = APP . DS . "files" . DS . $this->request->data['Attribute']['event_id'];
-            }
-            $dir = new Folder($rootDir, true);
-            // move the file to the correct location
-            $destpath = $rootDir . DS . $this->Attribute->id; // id of the new attribute in the database
-            $file = new File ($destpath);
-            $zipfile = new File ($destpath . '.zip');
-            $fileInZip = new File($rootDir . DS . $filename); // FIXME do sanitization of the filename
+			if ($this->Attribute->save($this->request->data)) {
+				// attribute saved correctly in the db
+				// remove the published flag from the event
+				$this->Event->id = $this->request->data['Attribute']['event_id'];
+				$this->Event->saveField('published', 0);
+			} else {
+				$this->Session->setFlash(__('The attribute could not be saved. Did you already upload this file?'));
+				$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+			}
 
-            if ($file->exists() || $zipfile->exists() || $fileInZip->exists()) {
-                // this should never happen as the attribute id should be unique
-                $this->Session->setFlash(__('Attachment with this name already exist in this event.', true), 'default', array(), 'error');
-                // remove the entry from the database
-                $this->Attribute->delete();
-                $this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
-            }
-            if (!move_uploaded_file($tmpfile->path, $file->path)) {
-                $this->Session->setFlash(__('Problem with uploading attachment. Cannot move it to its final location.', true), 'default', array(), 'error');
-                // remove the entry from the database
-                $this->Attribute->delete();
-                $this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
-            }
+			// no errors in file upload, entry already in db, now move the file where needed and zip it if required.
+			// no sanitization is required on the filename, path or type as we save
+			// create directory structure
+			if (PHP_OS == 'WINNT') {
+				$rootDir = APP . "files" . DS . $this->request->data['Attribute']['event_id'];
+			} else {
+				$rootDir = APP . DS . "files" . DS . $this->request->data['Attribute']['event_id'];
+			}
+			$dir = new Folder($rootDir, true);
+			// move the file to the correct location
+			$destpath = $rootDir . DS . $this->Attribute->id; // id of the new attribute in the database
+			$file = new File ($destpath);
+			$zipfile = new File ($destpath . '.zip');
+			$fileInZip = new File($rootDir . DS . $filename); // FIXME do sanitization of the filename
 
-            // zip and password protect the malware files
-            if ($this->request->data['Attribute']['malware']) {
-                // TODO check if CakePHP has no easy/safe wrapper to execute commands
-                $execRetval = '';
-                $execOutput = array();
-                rename($file->path, $fileInZip->path); // TODO check if no workaround exists for the current filtering mechanisms
-                if (PHP_OS == 'WINNT') {
-                    exec("zip -j -P infected " . $zipfile->path . ' "' . $fileInZip->path . '"', $execOutput, $execRetval);
-                } else {
-                    exec("zip -j -P infected " . $zipfile->path . ' "' . addslashes($fileInZip->path) . '"', $execOutput, $execRetval);
-                }
-                if ($execRetval != 0) { // not EXIT_SUCCESS
-                    $this->Session->setFlash(__('Problem with zipping the attachment. Please report to administrator. ' . $execOutput, true), 'default', array(), 'error');
-                    // remove the entry from the database
-                    $this->Attribute->delete();
-                    $fileInZip->delete();
-                    $file->delete();
-                    $this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
-                };
-                $fileInZip->delete();   // delete the original not-zipped-file
-                rename($zipfile->path, $file->path); // rename the .zip to .nothing
-            }
+			if ($file->exists() || $zipfile->exists() || $fileInZip->exists()) {
+				// this should never happen as the attribute id should be unique
+				$this->Session->setFlash(__('Attachment with this name already exist in this event.', true), 'default', array(), 'error');
+				// remove the entry from the database
+				$this->Attribute->delete();
+				$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+			}
+			if (!move_uploaded_file($tmpfile->path, $file->path)) {
+				$this->Session->setFlash(__('Problem with uploading attachment. Cannot move it to its final location.', true), 'default', array(), 'error');
+				// remove the entry from the database
+				$this->Attribute->delete();
+				$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+			}
 
-            // everything is done, now redirect to event view
-            $this->Session->setFlash(__('The attachment has been uploaded'));
-            $this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+			// zip and password protect the malware files
+			if ($this->request->data['Attribute']['malware']) {
+				// TODO check if CakePHP has no easy/safe wrapper to execute commands
+				$execRetval = '';
+				$execOutput = array();
+				rename($file->path, $fileInZip->path); // TODO check if no workaround exists for the current filtering mechanisms
+				if (PHP_OS == 'WINNT') {
+					exec("zip -j -P infected " . $zipfile->path . ' "' . $fileInZip->path . '"', $execOutput, $execRetval);
+				} else {
+					exec("zip -j -P infected " . $zipfile->path . ' "' . addslashes($fileInZip->path) . '"', $execOutput, $execRetval);
+				}
+				if ($execRetval != 0) {	// not EXIT_SUCCESS
+					$this->Session->setFlash(__('Problem with zipping the attachment. Please report to administrator. ' . $execOutput, true), 'default', array(), 'error');
+					// remove the entry from the database
+					$this->Attribute->delete();
+					$fileInZip->delete();
+					$file->delete();
+					$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+				};
+				$fileInZip->delete();	// delete the original not-zipped-file
+				rename($zipfile->path, $file->path); // rename the .zip to .nothing
+			}
+			if ($this->request->data['Attribute']['malware']) {
+				$temp = $this->request->data;
+				$this->Attribute->create();
+				$temp['Attribute']['type'] = 'filename|sha256';
+				$temp['Attribute']['value'] = $filename . '|' .$sha256;
+				$temp['Attribute']['uuid'] = String::uuid();
+				$this->Attribute->save($temp, array('fieldlist' => array('value', 'type', 'category', 'event_id', 'distribution', 'to_ids')));
+				$this->Attribute->create();
+				$temp['Attribute']['type'] = 'filename|sha1';
+				$temp['Attribute']['value'] = $filename . '|' .$sha1;
+				$temp['Attribute']['uuid'] = String::uuid();
+				$this->Attribute->save($temp, array('fieldlist' => array('value', 'type', 'category', 'event_id', 'distribution', 'to_ids')));
+			}
 
-        } else {
-            // set the event_id in the form
-            $this->request->data['Attribute']['event_id'] = $eventId;
-            $this->loadModel('Event');
-            $events = $this->Event->findById($eventId);
-            $maxDist = $events['Event']['distribution'];
-            $this->set('maxDist', $maxDist);
-        }
 
-        // combobos for categories
-        $categories = $this->Attribute->validate['category']['rule'][1];
-        // just get them with attachments..
-        $selectedCategories = array();
-        foreach ($categories as $category) {
-            if (isset($this->Attribute->categoryDefinitions[$category])) {
-                $types = $this->Attribute->categoryDefinitions[$category]['types'];
-                $alreadySet = false;
-                foreach ($types as $type) {
-                    if ($this->Attribute->typeIsAttachment($type) && !$alreadySet) {
-                        // add to the whole..
-                        $selectedCategories[] = $category;
-                        $alreadySet = true;
-                        continue;
-                    }
-                }
-            }
-        };
-        $categories = $this->_arrayToValuesIndexArray($selectedCategories);
-        $this->set('categories',$categories);
 
-        $this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
-        $this->set('typeDefinitions', $this->Attribute->typeDefinitions);
-        $this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
+			// everything is done, now redirect to event view
+			$this->Session->setFlash(__('The attachment has been uploaded'));
+			$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
 
-        $this->set('zippedDefinitions', $this->Attribute->zippedDefinitions);
-        $this->set('uploadDefinitions', $this->Attribute->uploadDefinitions);
+		} else {
+			// set the event_id in the form
+			$this->request->data['Attribute']['event_id'] = $eventId;
+		}
 
-        // combobox for distribution
-        if (isset($maxDist)) {
-            $distributionsBeforeCut = array_keys($this->Attribute->distributionDescriptions);
-            $count = 0;
-            foreach ($distributionsBeforeCut as $current) {
-                $distributions[$count] = $current;
-                if ($distributions[$count] == $maxDist)break;
-                $count++;
-            }
-        } else {
-            $distributions = array_keys($this->Attribute->distributionDescriptions);
-        }
-        $distributions = $this->_arrayToValuesIndexArray($distributions);
-        $this->set('distributions', $distributions);
-        // tooltip for distribution
-        $this->set('distributionDescriptions', $this->Attribute->distributionDescriptions);
-    }
+		// combobos for categories
+		$categories = $this->Attribute->validate['category']['rule'][1];
+		// just get them with attachments..
+		$selectedCategories = array();
+		foreach ($categories as $category) {
+			if (isset($this->Attribute->categoryDefinitions[$category])) {
+				$types = $this->Attribute->categoryDefinitions[$category]['types'];
+				$alreadySet = false;
+				foreach ($types as $type) {
+					if ($this->Attribute->typeIsAttachment($type) && !$alreadySet) {
+						// add to the whole..
+						$selectedCategories[] = $category;
+						$alreadySet = true;
+						continue;
+					}
+				}
+			}
+		};
+		$categories = $this->_arrayToValuesIndexArray($selectedCategories);
+		$this->set('categories',$categories);
+
+		$this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
+		$this->set('typeDefinitions', $this->Attribute->typeDefinitions);
+		$this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
+
+		$this->set('zippedDefinitions', $this->Attribute->zippedDefinitions);
+		$this->set('uploadDefinitions', $this->Attribute->uploadDefinitions);
+
+		// combobox for distribution
+		$this->loadModel('Event');
+		$this->set('distributionDescriptions', $this->Attribute->distributionDescriptions);
+		$this->set('distributionLevels', $this->Event->distributionLevels);
+		$events = $this->Event->findById($eventId);
+		$this->set('currentDist', $events['Event']['distribution']);
+		$this->set('published', $events['Event']['published']);
+	}
+
+	/**
+	 * Imports the CSV threatConnect file to multiple attributes
+	 * @param int $id  The id of the event
+	 */
+	public function add_threatconnect($eventId = null) {
+		if ($this->request->is('post')) {
+			//
+			// File upload
+			//
+			// Check if there were problems with the file upload
+			$tmpfile = new File($this->request->data['Attribute']['value']['tmp_name']);
+			if ((isset($this->request->data['Attribute']['value']['error']) && $this->request->data['Attribute']['value']['error'] == 0) ||
+			        (!empty( $this->request->data['Attribute']['value']['tmp_name']) && $this->request->data['Attribute']['value']['tmp_name'] != 'none')
+			) {
+			    if (!is_uploaded_file($tmpfile->path))
+			        throw new InternalErrorException('PHP says file was not uploaded. Are you attacking me?');
+			} else {
+			    $this->Session->setFlash(__('There was a problem to upload the file.', true), 'default', array(), 'error');
+			    $this->redirect(array('controller' => 'attributes', 'action' => 'add_threatconnect', $this->request->data['Attribute']['event_id']));
+			}
+			// verify mime type
+			$file_info = $tmpfile->info();
+			if ($file_info['mime'] != 'text/plain') {
+				$this->Session->setFlash('File not in CSV format.', 'default', array(), 'error');
+				$this->redirect(array('controller' => 'attributes', 'action' => 'add_threatconnect', $this->request->data['Attribute']['event_id']));
+			}
+
+			// parse uploaded csv file
+			$filename = '/Users/chri/Downloads/ThreatConnectExport2.csv';
+			$filename = $tmpfile->path;
+			$header = NULL;
+			$entries = array();
+			if (($handle = fopen($filename, 'r')) !== FALSE) {
+				while (($row = fgetcsv($handle, 0, ',', '"')) !== FALSE) {
+					if(!$header)
+						$header = $row;
+					else
+						$entries[] = array_combine($header, $row);
+				}
+				fclose($handle);
+			}
+
+			// verify header of the file (first row)
+			$expected_header = array(
+					'Type', 'Value', 'Rating', 'Confidence', 'DateAdded',
+					'Description', 'Source', 'DNS', 'Whois');
+			if ($header != $expected_header) {
+				$this->Session->setFlash('Incorrect ThreatConnect headers. Expecting: '.implode(',', $expected_header), 'default', array(), 'error');
+				$this->redirect(array('controller' => 'attributes', 'action' => 'add_threatconnect', $this->request->data['Attribute']['event_id']));
+			}
+
+			//
+			// import attributes
+			//
+			$attributes = array();  // array with all the attributes we're going to save
+			foreach($entries as $entry) {
+				$attribute = array();
+				$attribute['event_id'] = $this->request->data['Attribute']['event_id'];
+				$attribute['value'] = $entry['Value'];
+				$attribute['to_ids'] = ($entry['Confidence'] > 51) ? 1 : 0; // To IDS if high confidence
+				$attribute['distribution'] = 3; // 'All communities'
+				switch($entry['Type']) {
+					case 'Address':
+						$attribute['category'] = 'Network activity';
+						$attribute['type'] = 'ip-dst';
+						break;
+					case 'Host':
+						$attribute['category'] = 'Network activity';
+						$attribute['type'] = 'domain';
+						break;
+					case 'EmailAddress':
+						$attribute['category'] = 'Payload delivery';
+						$attribute['type'] = 'email-src';
+						break;
+					case 'File':
+						$attribute['category'] = 'Artifacts dropped';
+						$attribute['value'] = strtolower($attribute['value']);
+						if (preg_match("#^[0-9a-f]{32}$#", $attribute['value']))
+							$attribute['type'] = 'md5';
+						else if (preg_match("#^[0-9a-f]{40}$#", $attribute['value']))
+						    $attribute['type'] = 'sha1';
+						else if (preg_match("#^[0-9a-f]{64}$#", $attribute['value']))
+						    $attribute['type'] = 'sha256';
+						else
+							// do not keep attributes that do not have a match
+							$attribute=NULL;
+						break;
+					case 'URL':
+						$attribute['category'] = 'Network activity';
+						$attribute['type'] = 'url';
+						break;
+					default:
+						// do not keep attributes that do not have a match
+						$attribute=NULL;
+				}
+				// add attribute to the array that will be saved
+				if ($attribute) $attributes[] = $attribute;
+			}
+
+			//
+			// import source info:
+			//
+			// 1/ iterate over all the sources, unique
+			// 2/ add uniques as 'Internal reference'
+			// 3/ if url format -> 'link'
+			//	else 'comment'
+			$references = array();
+			foreach($entries as $entry) {
+				$references[$entry['Source']] = true;
+			}
+			$references = array_keys($references);
+			// generate the Attributes
+			foreach($references as $reference) {
+				$attribute = array();
+				$attribute['event_id'] = $this->request->data['Attribute']['event_id'];
+				$attribute['category'] = 'Internal reference';
+				if (preg_match('#^(http|ftp)(s)?\:\/\/((([a-z|0-9|\-]{1,25})(\.)?){2,7})($|/.*$)#i', $reference))
+					$attribute['type'] = 'link';
+				else
+					$attribute['type'] = 'comment';
+				$attribute['value'] = $reference;
+				$attribute['distribution'] = 3; // 'All communities'
+				// add attribute to the array that will be saved
+				$attributes[] = $attribute;
+			}
+
+			//
+			// finally save all the attributes at once, and continue if there are validation errors
+			//
+			$this->Attribute->saveMany($attributes, array('validate' => true));
+			// data imported (with or without errors)
+			// remove the published flag from the event
+			$this->loadModel('Event');
+			$this->Event->id = $this->request->data['Attribute']['event_id'];
+			$this->Event->saveField('published', 0);
+
+			// everything is done, now redirect to event view
+			$this->Session->setFlash(__('The ThreatConnect data has been imported'));
+			$this->redirect(array('controller' => 'events', 'action' => 'view', $this->request->data['Attribute']['event_id']));
+
+		} else {
+			// set the event_id in the form
+			$this->request->data['Attribute']['event_id'] = $eventId;
+		}
+
+		// form not submitted, show page
+		$this->loadModel('Event');
+		$events = $this->Event->findById($eventId);
+		$this->set('published', $events['Event']['published']);
+	}
+
 
 /**
  * edit method
@@ -471,153 +620,119 @@ class AttributesController extends AppController {
  * @return void
  * @throws NotFoundException
  */
-    public function edit($id = null) {
-        $this->Attribute->id = $id;
-        if (!$this->Attribute->exists()) {
-            throw new NotFoundException(__('Invalid attribute'));
-        }
+	public function edit($id = null) {
+		$this->Attribute->id = $id;
+		$date = new DateTime();
+		if (!$this->Attribute->exists()) {
+			throw new NotFoundException(__('Invalid attribute'));
+		}
+		$this->Attribute->read();
+		//set stuff to fix undefined index: uuid
+		if (!$this->_isRest()) {
+			$uuid = $this->Attribute->data['Attribute']['uuid'];
+		}
+		if (!$this->_isSiteAdmin()) {
+			// check for non-private and re-read
+			if (($this->Attribute->data['Event']['org'] != $this->Auth->user('org')) || (($this->Attribute->data['Event']['org'] == $this->Auth->user('org')) && ($this->Attribute->data['Event']['user_id'] != $this->Auth->user('id')) && (!$this->userRole['perm_modify'] || !$this->userRole['perm_modify_org']))) {
+				$this->Session->setFlash(__('Invalid attribute.'));
+				$this->redirect(array('controller' => 'events', 'action' => 'index'));
+			}
+		}
 
-        $this->Attribute->read();
-        //set stuff to fix undefined index: uuid
-        if (!$this->_isRest()) {
-            $uuid = $this->Attribute->data['Attribute']['uuid'];
-        }
-        if (!$this->_IsSiteAdmin()) {
-            // check for non-private and re-read
-            if (($this->Attribute->data['Event']['org'] != $this->Auth->user('org')) || (($this->Attribute->data['Event']['org'] == $this->Auth->user('org')) && ($this->Attribute->data['Event']['user_id'] != $this->Auth->user('id')) && (!$this->checkAction('prem_modify') || !$this->checkRole() || !$this->checkAction('perm_publish')))) {
-                $this->Session->setFlash(__('Invalid attribute.'));
-                $this->redirect(array('controller' => 'events', 'action' => 'index'));
-            }
-        }
+		$eventId = $this->Attribute->data['Attribute']['event_id'];
+		if ('attachment' == $this->Attribute->data['Attribute']['type'] ||
+			'malware-sample' == $this->Attribute->data['Attribute']['type'] ) {
+			$this->set('attachment', true);
+			//	TODO we should ensure 'value' cannot be changed here and not only on a view level (because of the associated file)
+			//	$this->Session->setFlash(__('You cannot edit attachment attributes.', true), 'default', array(), 'error');
+			//	$this->redirect(array('controller' => 'events', 'action' => 'view', $old_attribute['Event']['id']));
+		} else {
+			$this->set('attachment', false);
+		}
+		if ($this->request->is('post') || $this->request->is('put')) {
 
-        $eventId = $this->Attribute->data['Attribute']['event_id'];
-        if ('attachment' == $this->Attribute->data['Attribute']['type'] ||
-            'malware-sample' == $this->Attribute->data['Attribute']['type'] ) {
-            $this->set('attachment', true);
-            //  TODO we should ensure 'value' cannot be changed here and not only on a view level (because of the associated file)
-            //  $this->Session->setFlash(__('You cannot edit attachment attributes.', true), 'default', array(), 'error');
-            //  $this->redirect(array('controller' => 'events', 'action' => 'view', $old_attribute['Event']['id']));
-        } else {
-            $this->set('attachment', false);
-        }
-        if ($this->request->is('post') || $this->request->is('put')) {
+			// reposition to get the attribute.id with given uuid
+			// Notice (8): Undefined index: uuid [APP/Controller/AttributesController.php, line 502]
+			// Fixed - uuid was not passed back from the form since it's not a field. Set the uuid in a variable for non rest users, rest should have uuid.
+			// Generally all of this should be _isRest() only, but that's something for later to think about
+			if ($this->_isRest()) {
+				$existingAttribute = $this->Attribute->findByUuid($this->request->data['Attribute']['uuid']);
+			} else {
+				$existingAttribute = $this->Attribute->findByUuid($uuid);
+			}
+			if (count($existingAttribute)) {
+				$this->request->data['Attribute']['id'] = $existingAttribute['Attribute']['id'];
+			}
+			// check if the attribute has a timestamp already set (from a previous instance that is trying to edit via synchronisation)
+			if (isset($this->request->data['Attribute']['timestamp'])) {
+				// check which attribute is newer
+				if ($this->request->data['Attribute']['timestamp'] > $existingAttribute['Attribute']['timestamp']) {
+					// carry on with adding this attribute - Don't forget! if orgc!=user org, create shadow attribute, not attribute!
+				} else {
+					// the old one is newer or the same, replace the request's attribute with the old one
+					$this->request->data['Attribute'] = $existingAttribute['Attribute'];
+				}
+			} else {
+				$this->request->data['Attribute']['timestamp'] = $date->getTimestamp();
+			}
+			$fieldList = array('category', 'type', 'value1', 'value2', 'to_ids', 'distribution', 'value', 'timestamp');
 
-            // reposition to get the attribute.id with given uuid
-            // Notice (8): Undefined index: uuid [APP/Controller/AttributesController.php, line 502]
-            // Fixed - uuid was not passed back from the form since it's not a field. Set the uuid in a variable for non rest users, rest should have uuid.
-            // Generally all of this should be _isRest() only, but that's something for later to think about
-            if ($this->_isRest()) {
-                $existingAttribute = $this->Attribute->findByUuid($this->request->data['Attribute']['uuid']);
-            } else {
-                $existingAttribute = $this->Attribute->findByUuid($uuid);
-            }
-            if (count($existingAttribute)) {
-                $this->request->data['Attribute']['id'] = $existingAttribute['Attribute']['id'];
-            }
+			$this->loadModel('Event');
+			$this->Event->id = $eventId;
 
-            $fieldList = array('category', 'type', 'value1', 'value2', 'to_ids', 'private', 'cluster', 'value');
-            if ("i" == Configure::read('CyDefSIG.rest')) {
-                unset($this->request->data['Event']);
-                $this->Attribute->unbindModel(array('belongsTo' => array('Event')));
-                $this->request->data['Attribute']['event_id'] = $eventId;
-            }
+			// enabling / disabling the distribution field in the edit view based on whether user's org == orgc in the event
+			$this->Event->read();
+			if ($this->Attribute->save($this->request->data)) {
+				$this->Session->setFlash(__('The attribute has been saved'));
+				// remove the published flag from the event
+				$this->Event->set('timestamp', $date->getTimestamp());
+				$this->Event->set('published', 0);
+				$this->Event->save($this->Event->data, array('fieldList' => array('published', 'timestamp', 'info')));
 
-            $this->loadModel('Event');
-            $this->Event->id = $eventId;
+				if ($this->_isRest()) {
+					// REST users want to see the newly created event
+					$this->view($this->Attribute->getId());
+					$this->render('view');
+				} else {
+					$this->redirect(array('controller' => 'events', 'action' => 'view', $eventId));
+				}
+			} else {
+				if (!CakeSession::read('Message.flash')) {
+					$this->Session->setFlash(__('The attribute could not be saved. Please, try again.'));
+				} else {
+					$this->request->data = $this->Attribute->read(null, $id);
+				}
+			}
+		} else {
+			$this->request->data = $this->Attribute->read(null, $id);
+		}
+		$this->set('attribute', $this->request->data);
 
-            // enabling / disabling the distribution field in the edit view based on whether user's org == orgc in the event
-            $this->Event->read();
-            if (!$this->_isRest()) {
-                $canEditDist = false;
-                if ($this->Event->data['Event']['orgc'] == $this->_checkOrg()) {
-                    $this->set('canEditDist', true);
-                    $canEditDist = true;
-                } else {
-                    $this->set('canEditDist', false);
-                }
-                if (isset($this->request->data['Attribute']['distribution']) && $this->request->data['Attribute']['distribution'] != $existingAttribute['Attribute']['distribution']) {
-                    $this->request->data['Attribute']['dist_change'] = 1 + $existingAttribute['Attribute']['dist_change'];
-                }
-            }
-
-            if ($this->Attribute->save($this->request->data)) {
-                $this->Session->setFlash(('The attribute has been saved.'), 'default', array('class' => 'alert alert-success'));
-                // remove the published flag from the event
-                $this->Event->saveField('published', 0);
-
-                if ($this->_isRest()) {
-                    // REST users want to see the newly created event
-                    $this->view($this->Attribute->getId());
-                    $this->render('view');
-                } else {
-                    $this->redirect(array('controller' => 'events', 'action' => 'view', $eventId));
-                }
-            } else {
-                if (!CakeSession::read('Message.flash')) {
-                    $this->Session->setFlash(__('The attribute could not be saved. Please, try again.'), 'default', array('class' => 'alert alert-error'));
-                } else {
-                    $this->Attribute->contain('Event');
-                    $this->request->data = $this->Attribute->read(null, $id);
-                }
-            }
-        } else {
-            $this->Attribute->contain('Event');
-            $this->request->data = $this->Attribute->read(null, $id);
-        }
-
-        $this->set('attribute', $this->request->data);
-
-        // enabling / disabling the distribution field in the edit view based on whether user's org == orgc in the event
-        $this->loadModel('Event');
-        $this->Event->id = $eventId;
-        $this->Event->read();
-        $canEditDist = false;
-        if ($this->Event->data['Event']['orgc'] == $this->_checkOrg()) {
-            $this->set('canEditDist', true);
-            $canEditDist = true;
-        } else {
-            $this->set('canEditDist', false);
-        }
-        // needed for RBAC
-        // combobox for types
-        $types = array_keys($this->Attribute->typeDefinitions);
-        $types = $this->_arrayToValuesIndexArray($types);
-        $this->set('types', $types);
-        // combobox for categories
-        $categories = $this->Attribute->validate['category']['rule'][1];
-        array_pop($categories); // remove that last empty/space option
-        $categories = $this->_arrayToValuesIndexArray($categories);
-        $this->set('categories', $categories);
-
-        if ($canEditDist) {
-            $this->loadModel('Event');
-            $events = $this->Event->findById($eventId);
-            $maxDist = $events['Event']['distribution'];
-            $this->set('maxDist', $maxDist);
-            // combobox for distribution
-            if (isset($maxDist)) {
-                $distributionsBeforeCut = array_keys($this->Attribute->distributionDescriptions);
-                $count = 0;
-                foreach ($distributionsBeforeCut as $current) {
-                    $distributions[$count] = $current;
-                    if ($distributions[$count] == $maxDist)break;
-                    $count++;
-                }
-            } else {
-                $distributions = array_keys($this->Attribute->distributionDescriptions);
-            }
-            $distributions = $this->_arrayToValuesIndexArray($distributions);
-            $this->set('distributions', $distributions);
-            // tooltip for distribution
-            $this->set('distributionDescriptions', $this->Attribute->distributionDescriptions);
-        }
-
-        $this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
-        $this->set('typeDefinitions', $this->Attribute->typeDefinitions);
-        $this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
-
+		// enabling / disabling the distribution field in the edit view based on whether user's org == orgc in the event
+		$this->loadModel('Event');
+		$this->Event->id = $eventId;
+		$this->Event->read();
+		// needed for RBAC
+		// combobox for types
+		$types = array_keys($this->Attribute->typeDefinitions);
+		$types = $this->_arrayToValuesIndexArray($types);
+		$this->set('types', $types);
+		// combobox for categories
+		$categories = $this->Attribute->validate['category']['rule'][1];
+		array_pop($categories); // remove that last empty/space option
+		$categories = $this->_arrayToValuesIndexArray($categories);
+		$this->set('categories', $categories);
+		$this->set('currentDist', $this->Event->data['Event']['distribution']);
+		// combobox for distribution
+		$this->set('distributionLevels', $this->Attribute->distributionLevels);
+		// tooltip for distribution
+		$this->set('distributionDescriptions', $this->Attribute->distributionDescriptions);
+		$this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
+		$this->set('typeDefinitions', $this->Attribute->typeDefinitions);
+		$this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
         $this->set('killChains', $this->Attribute->KillChain->find('list'));
-    }
+	}
+
 
 /**
  * delete method
@@ -666,225 +781,271 @@ class AttributesController extends AppController {
  * Deletes this specific attribute from all remote servers
  * TODO move this to a component(?)
  */
-    private function __deleteAttributeFromServers($uuid) {
 
-        // get a list of the servers
-        $this->loadModel('Server');
-        $servers = $this->Server->find('all', array());
 
-        // iterate over the servers and upload the attribute
-        if (empty($servers))
-            return;
+    
 
-        App::uses('HttpSocket', 'Network/Http');
-        $HttpSocket = new HttpSocket();
-        foreach ($servers as &$server) {
-            $this->Attribute->deleteAttributeFromServer($uuid, $server, $HttpSocket);
-        }
-    }
+	private function __deleteAttributeFromServers($uuid) {
 
-    public function search() {
-        //die(debug($this->request->webroot));
-        $fullAddress = $this->request->webroot.'attributes/search';
+		// get a list of the servers with push active
+		$this->loadModel('Server');
+		$servers = $this->Server->find('all', array('conditions' => array('push' => 1)));
 
-        if ($this->request->here == $fullAddress) {
+		// iterate over the servers and upload the attribute
+		if (empty($servers))
+			return;
 
-            $this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
-            $this->set('typeDefinitions', $this->Attribute->typeDefinitions);
-            $this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
-            // reset the paginate_conditions
-            $this->Session->write('paginate_conditions',array());
+		App::uses('HttpSocket', 'Network/Http');
+		$HttpSocket = new HttpSocket();
+		foreach ($servers as &$server) {
+			$this->Attribute->deleteAttributeFromServer($uuid, $server, $HttpSocket);
+		}
+	}
 
-            if ($this->request->is('post') && ($this->request->here == $fullAddress)) {
-                $keyword = $this->request->data['Attribute']['keyword'];
-                $keyword2 = $this->request->data['Attribute']['keyword2'];
-                $org = $this->request->data['Attribute']['org'];
-                $type = $this->request->data['Attribute']['type'];
-                $category = $this->request->data['Attribute']['category'];
-                $this->set('keywordSearch', $keyword);
-                $keyWordText = null;
-                $keyWordText2 = null;
-                $this->set('typeSearch', $type);
-                $this->set('isSearch', 1);
-                $this->set('categorySearch', $category);
-                // search the db
-                $conditions = array();
+	public function search() {
+		$fullAddress = '/attributes/search';
 
-                // search on the value field
-                if (isset($keyword)) {
-                    $keywordArray = explode("\n", $keyword);
-                    $this->set('keywordArray', $keywordArray);
-                    $i = 1;
-                    $temp = array();
-                    foreach ($keywordArray as $keywordArrayElement) {
-                        $saveWord = trim($keywordArrayElement);
-                        $keywordArrayElement = '%' . trim($keywordArrayElement) . '%';
-                        if ($keywordArrayElement != '%%') array_push($temp, array('Attribute.value LIKE' => $keywordArrayElement));
-                        if ($i == 1 && $saveWord != '') $keyWordText = $saveWord;
-                        else if (($i > 1 && $i < 10) && $saveWord != '') $keyWordText = $keyWordText . ', ' . $saveWord;
-                        else if ($i == 10 && $saveWord != '') $keyWordText = $keyWordText . ' and several other keywords';
-                        $i++;
-                    }
-                    $this->set('keywordSearch', $keyWordText);
-                    if (!empty($temp)) {
-                        if (count($temp) == 1) {
-                            $conditions['Attribute.value LIKE'] = '%' . $keyWordText . '%';
-                        } else {
-                            $conditions['OR'] = $temp;
-                        }
-                    }
-                }
+		if ($this->request->here == $fullAddress) {
 
-                // event IDs to be excluded
-                if (isset($keyword2)) {
-                    $keywordArray2 = explode("\n", $keyword2);
-                    $i = 1;
-                    $temp = array();
-                    foreach ($keywordArray2 as $keywordArrayElement) {
-                        $saveWord = trim($keywordArrayElement);
-                        if (!is_numeric($saveWord) || $saveWord < 1) continue;
-                        array_push($temp, array('Attribute.event_id !=' => $keywordArrayElement));
-                        if ($i == 1 && $saveWord != '') $keyWordText2 = $saveWord;
-                        else if (($i > 1 && $i < 10) && $saveWord != '') $keyWordText2 = $keyWordText2 . ', ' . $saveWord;
-                        else if ($i == 10 && $saveWord != '') $keyWordText2 = $keyWordText2 . ' and several other events';
-                        $i++;
-                    }
-                    $this->set('keywordSearch2', $keyWordText2);
-                    if (!empty($temp)) {
-                        if (count($temp) == 1) {
-                            $conditions['Attribute.event_id !='] = $keyWordText2;
-                        } else {
-                            $conditions['AND'] = $temp;
-                        }
-                    }
-                }
-                if ($type != 'ALL') {
-                    $conditions['Attribute.type ='] = $type;
-                }
-                if ($category != 'ALL') {
-                    $conditions['Attribute.category ='] = $category;
-                }
-                // organisation search field
-                if (isset($org) && $org != '') {
-                    $org = trim($org);
-                    $this->set('orgSearch', $org);
-                    $conditions['Event.orgc ='] = $org;
-                }
-                $this->Attribute->recursive = 0;
-                $this->paginate = array(
-                    'limit' => 60,
-                    'maxLimit' => 9999, // LATER we will bump here on a problem once we have more than 9999 attributes?
-                    'conditions' => $conditions
-                );
-                if (!$this->_IsSiteAdmin()) {
-                    // merge in private conditions
-                    $this->paginate = Set::merge($this->paginate, array(
-                        'conditions' =>
-                            array("OR" => array(
-                            array('Event.org =' => $this->Auth->user('org')),
-                            array("AND" => array('Event.org !=' => $this->Auth->user('org')), array('Event.private !=' => 1), array('Attribute.private !=' => 1)))),
-                        )
-                    );
-                }
+			$this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
+			$this->set('typeDefinitions', $this->Attribute->typeDefinitions);
+			$this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
+			// reset the paginate_conditions
+			$this->Session->write('paginate_conditions',array());
+			if ($this->request->is('post') && ($this->request->here == $fullAddress)) {
+				$keyword = $this->request->data['Attribute']['keyword'];
+				$keyword2 = $this->request->data['Attribute']['keyword2'];
+				$org = $this->request->data['Attribute']['org'];
+				$type = $this->request->data['Attribute']['type'];
+				$ioc = $this->request->data['Attribute']['ioc'];
+				$this->set('ioc', $ioc);
+				$category = $this->request->data['Attribute']['category'];
+				$this->set('keywordSearch', $keyword);
+				$keyWordText = null;
+				$keyWordText2 = null;
+				$keyWordText3 = null;
+				$this->set('typeSearch', $type);
+				$this->set('isSearch', 1);
+				$this->set('categorySearch', $category);
+				// search the db
+				$conditions = array();
+				if ($ioc) {
+					$conditions['AND'][] = array('Attribute.to_ids =' => 1);
+					$conditions['AND'][] = array('Event.published =' => 1);
+				}
+				// search on the value field
+				if (isset($keyword)) {
+					$keywordArray = explode("\n", $keyword);
+					$this->set('keywordArray', $keywordArray);
+					$i = 1;
+					$temp = array();
+					$temp2 = array();
+					foreach ($keywordArray as $keywordArrayElement) {
+						$saveWord = trim($keywordArrayElement);
+						$keywordArrayElement = '%' . trim($keywordArrayElement) . '%';
+						if ($keywordArrayElement != '%%') {
+							if ($keywordArrayElement[1] == '!') {
+								array_push($temp2, array('Attribute.value NOT LIKE' => '%' . substr($keywordArrayElement, 2)));
+							} else {
+								array_push($temp, array('Attribute.value LIKE' => $keywordArrayElement));
+							}
+						}
+						if ($i == 1 && $saveWord != '') $keyWordText = $saveWord;
+						else if (($i > 1 && $i < 10) && $saveWord != '') $keyWordText = $keyWordText . ', ' . $saveWord;
+						else if ($i == 10 && $saveWord != '') $keyWordText = $keyWordText . ' and several other keywords';
+						$i++;
+					}
+					$this->set('keywordSearch', $keyWordText);
+					if (!empty($temp)) {
+						$conditions['AND']['OR'] = $temp;
+					}
+					if (!empty($temp2)) {
+						$conditions['AND'][] = $temp2;
+					}
 
-                $idList = array();
-                $attributes = $this->paginate();
-                foreach ($attributes as &$attribute) {
-                    if (!in_array($attribute['Attribute']['event_id'], $idList)) {
-                        $idList[] = $attribute['Attribute']['event_id'];
-                    }
-                }
-                $this->set('attributes', $attributes);
+				}
 
-                // and store into session
-                $this->Session->write('paginate_conditions', $this->paginate);
-                $this->Session->write('paginate_conditions_keyword', $keyword);
-                $this->Session->write('paginate_conditions_type', $type);
-                $this->Session->write('paginate_conditions_category', $category);
-                $this->Session->write('search_find_idlist', $idList);
+				// event IDs to be excluded
+				if (isset($keyword2)) {
+					$keywordArray2 = explode("\n", $keyword2);
+					$i = 1;
+					$temp = array();
+					foreach ($keywordArray2 as $keywordArrayElement) {
+						$saveWord = trim($keywordArrayElement);
+						if (empty($saveWord)) continue;
+						if ($saveWord[0] == '!') {
+							$temp[] = array('Attribute.event_id !=' => substr($saveWord, 1));
+						} else {
+							$temp['OR'][] = array('Attribute.event_id =' => $saveWord);
+						}
+						if ($i == 1 && $saveWord != '') $keyWordText2 = $saveWord;
+						else if (($i > 1 && $i < 10) && $saveWord != '') $keyWordText2 = $keyWordText2 . ', ' . $saveWord;
+						else if ($i == 10 && $saveWord != '') $keyWordText2 = $keyWordText2 . ' and several other events';
+						$i++;
+					}
+					$this->set('keywordSearch2', $keyWordText2);
+					if (!empty($temp)) {
+						$conditions['AND'][] = $temp;
+					}
+				}
+				if ($type != 'ALL') {
+					$conditions['Attribute.type ='] = $type;
+				}
+				if ($category != 'ALL') {
+					$conditions['Attribute.category ='] = $category;
+				}
+				// organisation search field
+				$i = 1;
+				$temp = array();
+				if (isset($org)) {
+					$orgArray = explode("\n", $org);
+					foreach ($orgArray as $orgArrayElement) {
+						$saveWord = trim($orgArrayElement);
+						if (empty($saveWord)) continue;
+						if ($saveWord[0] == '!') {
+							$temp[] = array('Event.orgc NOT LIKE ' => '%' . substr($saveWord, 1) . '%');
+						} else {
+							$temp['OR'][] = array('Event.orgc LIKE ' => '%' . $saveWord . '%');
+						}
+					}
+					if ($i == 1 && $saveWord != '') $keyWordText3 = $saveWord;
+					else if (($i > 1 && $i < 10) && $saveWord != '') $keyWordText3 = $keyWordText3 . ', ' . $saveWord;
+					else if ($i == 10 && $saveWord != '') $keyWordText3 = $keyWordText3 . ' and several other organisations';
+					$i++;
+					$this->set('orgSearch', $keyWordText3);
+					if (!empty($temp)) {
+						$conditions['AND'][] = $temp;
+					}
+				}
+				$this->Attribute->recursive = 0;
+				$this->paginate = array(
+					'limit' => 60,
+					'maxLimit' => 9999, // LATER we will bump here on a problem once we have more than 9999 attributes?
+					'conditions' => $conditions
+				);
+				if (!$this->_isSiteAdmin()) {
+					// merge in private conditions
+					$this->paginate = Set::merge($this->paginate, array(
+						'conditions' =>
+							array("OR" => array(
+							array('Event.org =' => $this->Auth->user('org')),
+							array("AND" => array('Event.org !=' => $this->Auth->user('org')), array('Event.distribution !=' => 0), array('Attribute.distribution !=' => 0)))),
+						)
+					);
+				}
 
-                // set the same view as the index page
-                $this->render('index');
-            } else {
-                // no search keyword is given, show the search form
+				$idList = array();
+				$attributeIdList = array();
+				$attributes = $this->paginate();
+				// if we searched for IOCs only, apply the whitelist to the search result!
 
-                // adding filtering by category and type
-                // combobox for types
-                $types = array('' => array('ALL' => 'ALL'), 'types' => array());
-                $types['types'] = array_merge($types['types'], $this->_arrayToValuesIndexArray(array_keys($this->Attribute->typeDefinitions)));
-                $this->set('types', $types);
+				if ($ioc) {
+					$this->loadModel('Whitelist');
+					$attributes = $this->Whitelist->removeWhitelistedFromArray($attributes, true);
+				}
 
-                // combobox for categories
-                $categories = array('' => array('ALL' => 'ALL', '' => ''), 'categories' => array());
-                array_pop($this->Attribute->validate['category']['rule'][1]); // remove that last 'empty' item
-                $categories['categories'] = array_merge($categories['categories'], $this->_arrayToValuesIndexArray($this->Attribute->validate['category']['rule'][1]));
-                $this->set('categories', $categories);
-            }
-        } else {
-            $this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
-            $this->set('typeDefinitions', $this->Attribute->typeDefinitions);
-            $this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
+				foreach ($attributes as &$attribute) {
+					$attributeIdList[] = $attribute['Attribute']['id'];
+					if (!in_array($attribute['Attribute']['event_id'], $idList)) {
+						$idList[] = $attribute['Attribute']['event_id'];
+					}
+				}
+				$this->set('attributes', $attributes);
 
-            // get from Session
-            $keyword = $this->Session->read('paginate_conditions_keyword');
-            $type = $this->Session->read('paginate_conditions_type');
-            $category = $this->Session->read('paginate_conditions_category');
-            $this->set('keywordSearch', $keyword);
-            $this->set('typeSearch', $type);
-            $this->set('isSearch', 1);
-            $this->set('categorySearch', $category);
+				// and store into session
+				$this->Session->write('paginate_conditions', $this->paginate);
+				$this->Session->write('paginate_conditions_keyword', $keyword);
+				$this->Session->write('paginate_conditions_keyword2', $keyword2);
+				$this->Session->write('paginate_conditions_org', $org);
+				$this->Session->write('paginate_conditions_type', $type);
+				$this->Session->write('paginate_conditions_category', $category);
+				$this->Session->write('search_find_idlist', $idList);
+				$this->Session->write('search_find_attributeidlist', $attributeIdList);
 
-            // re-get pagination
-            $this->Attribute->recursive = 0;
-            $this->paginate = $this->Session->read('paginate_conditions');
-            $this->set('attributes', $this->paginate());
+				// set the same view as the index page
+				$this->render('index');
+			} else {
+				// no search keyword is given, show the search form
 
-            // set the same view as the index page
-            $this->render('index');
-        }
-    }
+				// adding filtering by category and type
+				// combobox for types
+				$types = array('' => array('ALL' => 'ALL'), 'types' => array());
+				$types['types'] = array_merge($types['types'], $this->_arrayToValuesIndexArray(array_keys($this->Attribute->typeDefinitions)));
+				$this->set('types', $types);
 
-    public function downloadAttributes() {
-        $idList = $this->Session->read('search_find_idlist');
-        $this->response->type('xml');   // set the content type
-        $this->header('Content-Disposition: download; filename="misp.attribute.search.xml"');
-        $this->layout = 'xml/default';
-        $this->loadModel('Attribute');
-        if (!isset($idList)) {
-            print "No results found to export\n";
-        } else {
-            foreach ($idList as $listElement) {
-                $put['OR'][] = array('Attribute.id' => $listElement);
-            }
-            $conditions['AND'][] = $put;
-            //  restricting to non-private or same org if the user is not a site-admin.
-            if (!$this->_isSiteAdmin()) {
-                $temp = array();
-                $distribution = array();
-                array_push($distribution, array('Attribute.private =' => 0));
-                array_push($distribution, array('Attribute.cluster =' => 1));
-                array_push($temp, array('OR' => $distribution));
-                array_push($temp, array('(SELECT events.org FROM events WHERE events.id = Attribute.event_id) LIKE' => $this->_checkOrg()));
-                $put2['OR'][] = $temp;
-                $conditions['AND'][] = $put2;
-            }
-            $params = array(
-                    'conditions' => $conditions, //array of conditions
-                    'recursive' => 0, //int
-                    'fields' => array('Attribute.id', 'Attribute.value'), //array of field names
-                    'order' => array('Attribute.id'), //string or array defining order
-            );
-            $attributes = $this->Attribute->find('all', $params);
-            $this->set('results', $attributes);
-        }
-        $this->render('xml');
-    }
+				// combobox for categories
+				$categories = array('' => array('ALL' => 'ALL', '' => ''), 'categories' => array());
+				array_pop($this->Attribute->validate['category']['rule'][1]); // remove that last 'empty' item
+				$categories['categories'] = array_merge($categories['categories'], $this->_arrayToValuesIndexArray($this->Attribute->validate['category']['rule'][1]));
+				$this->set('categories', $categories);
+			}
+		} else {
+			$this->set('attrDescriptions', $this->Attribute->fieldDescriptions);
+			$this->set('typeDefinitions', $this->Attribute->typeDefinitions);
+			$this->set('categoryDefinitions', $this->Attribute->categoryDefinitions);
 
-    public function checkComposites() {
-        if (!self::_isAdmin()) throw new NotFoundException();
+			// get from Session
+			$keyword = $this->Session->read('paginate_conditions_keyword');
+			$keyword2 = $this->Session->read('paginate_conditions_keyword2');
+			$org = $this->Session->read('paginate_conditions_org');
+			$type = $this->Session->read('paginate_conditions_type');
+			$category = $this->Session->read('paginate_conditions_category');
+			$this->set('keywordSearch', $keyword);
+			$this->set('keywordSearch2', $keyword2);
+			$this->set('orgSearch', $org);
+			$this->set('typeSearch', $type);
+			$this->set('isSearch', 1);
+			$this->set('categorySearch', $category);
 
-        $this->set('fails', $this->Attribute->checkComposites());
-    }
+			// re-get pagination
+			$this->Attribute->recursive = 0;
+			$this->paginate = $this->Session->read('paginate_conditions');
+			$this->set('attributes', $this->paginate());
+
+			// set the same view as the index page
+			$this->render('index');
+		}
+	}
+
+	public function downloadAttributes() {
+		$idList = $this->Session->read('search_find_idlist');
+		$this->response->type('xml');	// set the content type
+		$this->header('Content-Disposition: download; filename="misp.attribute.search.xml"');
+		$this->layout = 'xml/default';
+		$this->loadModel('Attribute');
+		if (!isset($idList)) {
+			print "No results found to export\n";
+		} else {
+			foreach ($idList as $listElement) {
+				$put['OR'][] = array('Attribute.id' => $listElement);
+			}
+			$conditions['AND'][] = $put;
+			//	restricting to non-private or same org if the user is not a site-admin.
+			if (!$this->_isSiteAdmin()) {
+				$temp = array();
+				array_push($temp, array('Attribute.distribution >' => 0));
+				array_push($temp, array('OR' => $distribution));
+				array_push($temp, array('(SELECT events.org FROM events WHERE events.id = Attribute.event_id) LIKE' => $this->_checkOrg()));
+				$put2['OR'][] = $temp;
+				$conditions['AND'][] = $put2;
+			}
+			$params = array(
+					'conditions' => $conditions, //array of conditions
+					'recursive' => 0, //int
+					'fields' => array('Attribute.id', 'Attribute.value'), //array of field names
+					'order' => array('Attribute.id'), //string or array defining order
+			);
+			$attributes = $this->Attribute->find('all', $params);
+			$this->set('results', $attributes);
+		}
+		$this->render('xml');
+	}
+
+	public function checkComposites() {
+		if (!self::_isAdmin()) throw new NotFoundException();
+
+		$this->set('fails', $this->Attribute->checkComposites());
+	}
 
     public function toggle(){
         $return = array();

@@ -7,9 +7,15 @@ body{
 input, button, select, textarea{
 	font-family: "RobotoLight"
 }
-/*.close{
-	float:none;
-}*/
+button .full-width{
+  width:100%;
+}
+
+.bottom-buffer {
+	margin-bottom:10px;
+}
+
+
 
 h2{
 	font-size: 25px;
@@ -19,6 +25,20 @@ h3{
 	font-size: 18px;
 	line-height: 20px;
 }
+
+pre {
+	font-size: 11px;
+
+}
+.nav-list {
+	padding-right: 5px;
+}
+
+.nav-list > li > a {
+	margin-right: -30px;
+}
+
+
 .navbar-lab .navbar-inner{
 	background: #FF9900;
 
@@ -34,6 +54,7 @@ h3{
 	top: 0;
 	visibility: hidden;
 	margin-top: -1px;
+	z-index: 2;
 }
 
 .dropdown-menu li:hover .sub-menu {
@@ -61,8 +82,59 @@ h3{
 ul.nav li.dropdown:hover ul.dropdown-menu{
 	display: block;
 }
+
+th.filter {
+	white-space:nowrap;
+}
+th.filter a {
+	cursor: pointer;
+}
+
+td.searchLabel{
+    opacity: 50;
+    height: 20px;
+    padding-top: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+    vertical-align:top;
+    background-color: #F2F2F2;
+    box-shadow: 0px 0px 6px #B2B2B2;
+}
+td.searchLabelFirst{
+    opacity: 50;
+    height: 20px;
+    padding-top: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+    vertical-align:top;
+    background-color: #F2F2F2;
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+    box-shadow: 0px 0px 6px #B2B2B2;
+}
+td.searchLabelCancel{
+    opacity: 50;
+    height: 20px;
+    width: 20px;
+    padding-top: 4px;
+    padding-left: 5px;
+	vertical-align:top;
+    background-color: #FFFFFF;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    box-shadow: 0px 0px 6px #B2B2B2;
+}
+
 .dropdown-menu{
 	top: 90%;
+}
+
+form .error-message {
+	border-color: #b94a48;
+  -webkit-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+     -moz-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+          box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+    background-color: #f2dede;
 }
 
 
@@ -74,6 +146,7 @@ div.view {
   width:85%;
   border-left:1px solid #666;
   padding:10px 1%;
+  padding-bottom:40px;
 }
 div.actions {
   float:left;
@@ -89,6 +162,43 @@ div.input{
 	float:left;
 	width: 230px;
 }
+
+div.forminfo{
+	font-size: 80%;
+    width:  220px;
+    opacity: 50;
+    margin-top: 0px;
+    margin-bottom: 10px;
+	float: top;
+    background-color: #F2F2F2;
+    border-radius: 5px;
+    box-shadow: 0px 0px 6px #B2B2B2;
+}
+
+div.visualisation{
+	font-size: 80%;
+	display: inline-block;
+    opacity: 50;
+    margin-top: 0px;
+    margin-bottom: 10px;
+	float: top;
+    background-color: #F2F2F2;
+    border-radius: 5px;
+    box-shadow: 5px 5px 6px #B2B2B2;
+}
+
+div.message{
+	font-size: 133%;
+    opacity: 50;
+    margin-bottom: 15px;
+    padding: 5px;
+	float: top;
+	color: #FFFFFF;
+    background-color: #C11B17;
+    border-radius: 7px;
+    box-shadow: 5px 5px 8px #B2B2B2;
+}
+
 
 .clear{
 	clear:both;
@@ -121,6 +231,23 @@ td.actions {
 }
 
 
+td.short {
+	width:5%;
+	white-space: nowrap;
+	text-align: left;
+}
+
+td.highlight1 {
+	background-color: #0088cc !important;
+	color: #ffffff !important;
+}
+
+td.highlight2 {
+	background-color: #747170 !important;
+	color: #ffffff !important;
+
+}
+
 table.fullwidth {
 		 border:1px solid #f0f0f0;
 }
@@ -151,29 +278,28 @@ table.fullwidth tr:hover{
 table.fullwidth th:hover{
  color:#fff;
 }
-/*
-.view_icon{
-		background-position: 0 0;
- }
-.edit_icon{
-		 background-position: -17px 0;
+
+
+.table-hover tbody tr:hover > td,
+.table-hover tbody tr:hover > th {
+	background-color: #CFEFFF;
 }
-.delete_icon{
-		 background-position: -34px 0;
+
+
+th a.asc:after {
+	content: ' ⇣';
 }
-.tick_icon{
-		width: 16px;
-		height: 16px;
-		display: block;
-		background: url('../img/icons/icons-trans.png') -51px 0 no-repeat;
+th a.desc:after {
+	content: ' ⇡';
 }
-.cross_icon{
-		width: 16px;
-		height: 16px;
-		display: block;
-		background: url('../img/icons/icons-trans.png') -67px 0 no-repeat;
+
+td.action-links {
+	text-align: right;
 }
-*/
+
+.showspaces {
+
+}
 
 /** Scaffold View **/
 dl {
@@ -205,7 +331,6 @@ dd {
 .message:hover {
 		cursor:pointer;
 }
-
 
 .block {
   text-align: center;
@@ -253,3 +378,85 @@ input.checkbox[type=checkbox] + label{
 input.checkbox[type=checkbox]:checked + label{
     background: url('../img/on_off.png') 0 21px;
 }
+
+/** Debugging **/
+
+/* SQL log */
+.cake-sql-log {
+	display: block;
+	clear: both;
+	background: black;
+	color: #dddddd;
+}
+.cake-sql-log tr {
+	border: #dddddd solid 1px;
+}
+.cake-sql-log td {
+	padding: 4px 8px;
+	text-align: left;
+
+}
+.cake-sql-log caption {
+	color:#fff;
+}
+
+/* footer */
+.footer {
+	clear: both;
+	float: bottom;
+	width:100%;
+	bottom:0px;
+	height:42px;
+}
+
+.debugOff {
+	position:fixed;
+}
+
+.debugOn {
+	position:relative;
+}
+
+/* header */
+.header {
+	width:100%;
+	z-index: 1;
+}
+
+/* fonts for logo */
+
+.logoBlue {
+	color: #0088cc;
+}
+
+.logoGray {
+	color: #999999;
+}
+
+.footerText {
+	color: #999999;
+}
+.footerRightText {
+	padding-right:20px;
+	padding-top:12px;
+}
+
+.footerLeftText {
+	float:left;
+	z-index: 2;
+	padding-top:12px;
+}
+
+.footerCenterText {
+	padding-top:12px;
+	position: absolute;
+	width:100%;
+	text-align:center;
+	z-index:1;
+}
+
+.privateRedText {
+	color: #FF0000 !important;
+	font-weight:bold !important;
+}
+

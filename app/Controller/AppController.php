@@ -40,6 +40,10 @@ class AppController extends Controller {
 
     public $defaultModel = '';
 
+    public $debugMode = false;
+
+    public $userRole = null;
+
     public function __construct($id = false, $table = null, $ds = null) {
         parent::__construct($id, $table, $ds);
 
@@ -125,7 +129,26 @@ class AppController extends Controller {
             $this->set('isAclAdmin', $role['perm_admin']);
             $this->set('isAclAudit', $role['perm_audit']);
             $this->set('isAclAuth', $role['perm_auth']);
+            $this->userRole = $role;
+        } else {
+            $this->set('me', false);
+            $this->set('isAdmin', false);
+            $this->set('isSiteAdmin', false);
+            $this->set('isAclAdd', false);
+            $this->set('isAclModify', false);
+            $this->set('isAclModifyOrg', false);
+            $this->set('isAclPublish', false);
+            $this->set('isAclSync', false);
+            $this->set('isAclAdmin', false);
+            $this->set('isAclAudit', false);
+            $this->set('isAclAuth', false);
         }
+        if (Configure::read('debug') > 0) {
+            $this->debugMode = 'debugOn';
+        } else {
+            $this->debugMode = 'debugOff';
+        }
+        $this->set('debugMode', $this->debugMode);
     }
 
     public function beforeRender(){
@@ -145,6 +168,7 @@ class AppController extends Controller {
     protected function _isRest() {
         return (isset($this->RequestHandler) && $this->RequestHandler->isXml());
     }
+
 
 /**
  * Convert an array to the same array but with the values also as index instead of an interface_exists
@@ -167,6 +191,7 @@ class AppController extends Controller {
         return false;
     }
 
+
 /**
  * checks if the currently logged user is a site administrator (an admin that can manage any user or event on the instance and create / edit the roles).
  */
@@ -186,33 +211,29 @@ class AppController extends Controller {
  * Refreshes the Auth session with new/updated data
  * @return void
  */
-    protected function _refreshAuth() {
-        if (isset($this->User)) {
-            $user = $this->User->read(false, $this->Auth->user('id'));
-        } else {
-            $this->loadModel('User');
-            $this->User->recursive = -1;
-            $user = $this->User->findById($this->Auth->user('id'));
-        }
-        $this->Auth->login($user['User']);
-    }
 
-    public function generateCorrelation() {
-        if (!self::_isSiteAdmin()) throw new NotFoundException();
+	protected function _refreshAuth() {
+		$user = ClassRegistry::init('Role')->findById($this->Auth->user('id'));
+		$this->Auth->login($user['User']);
+	}
 
-        $this->loadModel('Correlation');
-        $this->Correlation->deleteAll(array('id !=' => ''), false);
-        $this->loadModel('Attribute');
-        $fields = array('Attribute.id', 'Attribute.event_id', 'Attribute.private', 'Attribute.cluster', 'Event.date', 'Event.org');
-        // get all attributes..
-        $attributes = $this->Attribute->find('all',array('recursive' => 0));
-        // for all attributes..
-        foreach ($attributes as $attribute) {
-            $this->Attribute->__afterSaveCorrelation($attribute['Attribute']);
-        }
-        $this->Session->setFlash(__('All done.'));
-        $this->redirect(array('controller' => 'events', 'action' => 'index', 'admin' => false));
-    }
+	public function generateCorrelation() {
+		if (!self::_isSiteAdmin()) throw new NotFoundException();
+
+		$this->loadModel('Correlation');
+		$this->Correlation->deleteAll(array('id !=' => ''), false);
+		$this->loadModel('Attribute');
+		$fields = array('Attribute.id', 'Attribute.event_id', 'Attribute.distribution', 'Attribute.cluster', 'Event.date', 'Event.org');
+		// get all attributes..
+		$attributes = $this->Attribute->find('all', array('recursive' => -1));
+		// for all attributes..
+		foreach ($attributes as $attribute) {
+			$this->Attribute->__afterSaveCorrelation($attribute['Attribute']);
+		}
+		$this->Session->setFlash(__('All done.'));
+		$this->redirect(array('controller' => 'events', 'action' => 'index', 'admin' => false));
+	}
+
 
 /**
  *
@@ -296,17 +317,20 @@ class AppController extends Controller {
         }
     }
 
-    public function generateCount() {
-        if (!self::_isSiteAdmin()) throw new NotFoundException();
-        $this->loadModel('Event');
-        $events = $this->Event->find('all', array('recursive' => 1));
-        foreach ($events as $event) {
-            $event['Event']['attribute_count'] = sizeof($event['Attribute']);
-            $this->Event->save($event);
-        }
-        $this->Session->setFlash(__('All done.'));
-        $this->redirect(array('controller' => 'events', 'action' => 'index', 'admin' => false));
-    }
+	public function generateCount() {
+		if (!self::_isSiteAdmin()) throw new NotFoundException();
+		// do one SQL query with the counts
+		// loop over events, update in db
+		$this->loadModel('Attribute');
+		$events = $this->Attribute->query('SELECT event_id, count(event_id) as attribute_count FROM attributes GROUP BY event_id');
+		foreach ($events as $event) {
+			$this->Event->read(null, $event['attributes']['event_id']);
+			$this->Event->set('attribute_count', $event[0]['attribute_count']);
+			$this->Event->save();
+		}
+		$this->Session->setFlash(__('All done. attribute_count generated from scratch.'));
+		$this->redirect(array('controller' => 'pages', 'action' => 'display', 'administration'));
+	}
 
 /**
  * CakePHP returns false if filesize is 0 at lib/cake/Utility/File.php:384
@@ -331,6 +355,7 @@ class AppController extends Controller {
  *
  * @throws NotFoundException // TODO Exception
  **/
+
     public function generateAllFor($field) {
         if (!self::_isSiteAdmin()) throw new NotFoundException();
 
@@ -364,4 +389,62 @@ class AppController extends Controller {
         //}
         return false;
     }
+
+
+	public function reportValidationIssuesEvents() {
+		// search for validation problems in the events
+		if (!self::_isSiteAdmin()) throw new NotFoundException();
+		print ("<h2>Listing invalid event validations</h2>");
+		$this->loadModel('Event');
+		// first remove executing some Behaviors because of Noud's crappy code
+		$this->Event->Behaviors->detach('Regexp');
+		// get all events..
+		$events = $this->Event->find('all', array('recursive' => -1));
+		// for all events..
+		foreach ($events as $event) {
+		    $this->Event->set($event);
+		    if ($this->Event->validates()) {
+		        // validates
+		    } else {
+		        $errors = $this->Event->validationErrors;
+		        print ("<h3>Validation errors for event: " . $event['Event']['id'] . "</h3><pre>");
+		        print_r($errors);
+		        print ("</pre><p>Event details:</p><pre>");
+		        print_r($event);
+		        print ("</pre><br/>");
+		    }
+		}
+	}
+
+	public function reportValidationIssuesAttributes() {
+		// TODO improve performance of this function by eliminating the additional SQL query per attribute
+		// search for validation problems in the attributes
+		if (!self::_isSiteAdmin()) throw new NotFoundException();
+		print ("<h2>Listing invalid attribute validations</h2>");
+		$this->loadModel('Attribute');
+		// for efficiency reasons remove the unique requirement
+		$this->Attribute->validator()->remove('value', 'unique');
+
+		// get all attributes..
+		$attributes = $this->Attribute->find('all', array('recursive' => -1));
+		// for all attributes..
+		foreach ($attributes as $attribute) {
+		    $this->Attribute->set($attribute);
+		    if ($this->Attribute->validates()) {
+		        // validates
+		    } else {
+		        $errors = $this->Attribute->validationErrors;
+		        print ("<h3>Validation errors for attribute: " . $attribute['Attribute']['id'] . "</h3><pre>");
+		        print_r($errors['value'][0]);
+		        print ("</pre><p>Attribute details:</p><pre>");
+		        print($attribute['Attribute']['event_id']."\n");
+		        print($attribute['Attribute']['category']."\n");
+		        print($attribute['Attribute']['type']."\n");
+		        print($attribute['Attribute']['value']."\n");
+		        print ("</pre><br/>");
+		    }
+		}
+	}
+
 }
+

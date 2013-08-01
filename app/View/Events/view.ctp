@@ -1,7 +1,18 @@
 <?php
 $mayModify = (($isAclModify && $event['Event']['user_id'] == $me['id']) || ($isAclModifyOrg && $event['Event']['org'] == $me['org']));
 $mayPublish = ($isAclPublish && $event['Event']['org'] == $me['org']);
+
+echo $this->element('actions_menu', array(
+    'event_id' => $event['Event']['id'],
+    'cimbl_id' => $event['Event']['CIMBL_id'],
+    'is_published' => $event['Event']['published'],
+    'may_modify' => $mayModify,
+    'may_publish' => $mayPublish,
+    'is_admin' => $isAdmin,
+    'is_site_admin' => $isSiteAdmin
+    ));
 ?>
+
 <div class="events view">
 
     <div class="row-fluid">
@@ -276,53 +287,4 @@ if (!empty($event['Attribute'])):?>
         <?php
 endif; ?>
     </div>
-</div>
-
-
-<div class="actions">
-    <?php
-        if ($isSiteAdmin || $mayModify): ?>
-
-    <ul>
-        <h3>Attribute actions</h3>
-        <li><?php echo $this->Html->link('Add Attribute', array('controller' => 'attributes', 'action' => 'add', $event['Event']['id']));?></li>
-        <li><?php echo $this->Html->link('Add Attachment', array('controller' => 'attributes', 'action' => 'add_attachment', $event['Event']['id']));?> </li></ul>
-        <?php
-endif; ?>
-<?php if ( 0 == $event['Event']['published'] && ($isAdmin || $mayPublish)):
-    // only show button if alert has not been sent  // LATER show the ALERT button in red-ish
-    ?>
-    <ul><li><?php
-    if ($isSiteAdmin || $mayPublish) {
-        echo $this->Form->postLink('Publish Event', array('action' => 'alert', $event['Event']['id']), null, 'Are you sure this event is complete and everyone should be informed?'); ?></li><li>
-        <?php echo $this->Form->postLink('Publish (no email)', array('action' => 'publish', $event['Event']['id']), null, 'Publish but do NOT send alert email? Only for minor changes!');
-    }
-    ?> </li></ul>
-    <?php elseif (0 == $event['Event']['published']): ?>
-        <ul><li>Not published</li></ul>
-    <?php else: ?>
-        <!-- ul><li>Alert already sent</li></ul -->
-    <?php
-endif; ?>
-    <ul><li><?php echo $this->Html->link(__('Contact reporter', true), array('action' => 'contact', $event['Event']['id'])); ?> </li>
-    <li><?php echo $this->Html->link(__('Download as XML', true), array('action' => 'download', $event['Event']['id'], 'ext' => 'xml')); ?></li>
-    <li><?php echo $this->Html->link(__('Download as XML (old)', true), array('action' => 'xml', 'download', $event['Event']['id'])); ?></li>
-    <li><?php echo $this->Html->link(__('Download as IOC', true), array('action' => 'downloadOpenIOCEvent', $event['Event']['id'])); ?> </li>
-    <?php if(!empty($event['Event']['CIMBL_id'])){?>
-    <li><?php echo $this->Html->link(__('Download CIMBL XML', true), array('controller' => 'CIMBLs', 'action' => 'download', $event['Event']['CIMBL_id'], 'ext' => 'xml')); ?></li>
-    <?php } ?>
-    <li><?php echo $this->Html->link(__('Download CSV', true), array('action' => 'download', $event['Event']['id'], 'ext' => 'csv')); ?></li>
-    </ul>
-
-    <ul>
-    <?php
-if ($isSiteAdmin || $mayModify): ?>
-        <li><?php echo $this->Html->link(__('Add Attribute', true), array('controller' => 'attributes', 'action' => 'add', $event['Event']['id']));?> </li>
-        <li><?php echo $this->Html->link(__('Add Attachment', true), array('controller' => 'attributes', 'action' => 'add_attachment', $event['Event']['id']));?> </li>
-        <li><?php echo $this->Html->link(__('Edit Event', true), array('action' => 'edit', $event['Event']['id'])); ?> </li>
-        <li><?php echo $this->Form->postLink(__('Delete Event'), array('action' => 'delete', $event['Event']['id']), null, __('Are you sure you want to delete # %s?', $event['Event']['id'])); ?></li>
-    <?php
-endif; ?>
-        <?php echo $this->element('actions_menu'); ?>
-    </ul>
 </div>

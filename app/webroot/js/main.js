@@ -9,6 +9,7 @@
 
     });
 
+<<<<<<< HEAD
     $(".span12").on('change', ".updateCIMBL", function(){
         $.ajax({
             url: $(this).parent().attr('action'),
@@ -41,4 +42,6 @@
         });
     });
 
+=======
+>>>>>>> develop
 }());

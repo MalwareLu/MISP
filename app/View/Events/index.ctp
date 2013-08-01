@@ -1,5 +1,10 @@
 <?php if(empty($this->passedArgs['key'])) $this->passedArgs['key'] = '';?>
-<?php //die(debug($events));?>
+<?php if(empty($this->passedArgs['searchinfo'])) $this->passedArgs['searchinfo'] = '';?>
+<?php if(empty($this->passedArgs['searchorg'])) $this->passedArgs['searchorg'] = '';?>
+<?php if(empty($this->passedArgs['searchDatefrom'])) $this->passedArgs['searchDatefrom'] = '';?>
+<?php if(empty($this->passedArgs['searchDateuntil'])) $this->passedArgs['searchDateuntil'] = '';?>
+<?php if(empty($this->passedArgs['searchpublished'])) $this->passedArgs['searchpublished'] = '2';?>
+
 <div class="events index">
     <h2><?php echo __('Filters');?></h2>
     <?php echo $this->Form->create('', array('action' => 'index')); ?>
@@ -114,11 +119,14 @@ foreach ($events as $event):?>
 endforeach; ?>
     </table>
     <p>
+
     <?php
     echo $this->Paginator->counter(array(
     'format' => __('Page {:page} of {:pages}, showing {:current} records out of {:count} total, starting on record {:start}, ending on {:end}')
     ));
-    ?>  </p>
+
+    ?>
+    </p>
 
     <div class="pagination">
         <ul>
@@ -129,13 +137,30 @@ endforeach; ?>
         ?>
         </ul>
     </div>
+
     <div class="progress progress-striped active hide">
         <div class="bar" style="width: 100%;"></div>
     </div>
 </div>
-<div class="actions">
-    <ul>
-        <?php echo $this->element('actions_menu'); ?>
-    </ul>
-</div>
+
+<?php echo $this->element('actions_menu'); ?>
+
+
+<script type="text/javascript">
+$(document).ready( function () {
+	// onload hide all buttons
+	$('#searchinfo').hide();
+	$('#searchorg').hide();
+	$('#searchdate').hide();
+	$('#searchpublished').hide();
+
+});
+
+function toggleField(field) {
+	$(field).toggle();
+	$(field +" input").focus();
+}
+
+
+</script>
 <?php echo $this->Js->writeBuffer();

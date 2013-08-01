@@ -9,11 +9,11 @@ class AdminCrudComponent extends AuthComponent {
     public $controller;
 
     public function initialize(Controller $controller) {
-        $this->controller = &$controller;
+        $this->controller = $controller;
     }
 
     public function startup(Controller $controller) {
-        $this->controller = &$controller;
+        $this->controller = $controller;
     }
 
 /**
@@ -96,6 +96,5 @@ class AdminCrudComponent extends AuthComponent {
         $this->controller->Session->setFlash(__(sprintf('%s was not deleted', $this->controller->defaultModel)));
         $this->controller->redirect(array('action' => 'index'));
     }
-
 
 }

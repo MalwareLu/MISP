@@ -20,8 +20,8 @@
  * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
 
-App::uses('Helper', 'View');
 App::uses('UrlCacheAppHelper', 'UrlCache.View/Helper');
+
 /**
  * Application helper
  *
@@ -36,6 +36,7 @@ class AppHelper extends UrlCacheAppHelper {
 		if (is_array($url) && !isset($url['admin'])) {
 			$url['admin'] = false;
 		}
-		return parent::url($url, $full);
+ 		return parent::url($url, $full);
+
 	}
 }

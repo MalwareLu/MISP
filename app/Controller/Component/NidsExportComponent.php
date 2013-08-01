@@ -1,5 +1,4 @@
 <?php
-
 class NidsExportComponent extends Component {
 
 	public $rules = array();

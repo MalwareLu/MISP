@@ -22,7 +22,6 @@ class ShadowAttribute extends AppModel {
 			//'change' => 'full'),
 		'Trim',
 		'Regexp' => array('fields' => array('value', 'value2')),
-		'Blacklist' => array('fields' => array('value'))
 	);
 
 	/**
@@ -272,8 +271,8 @@ class ShadowAttribute extends AppModel {
  * @var array
  */
 	public $belongsTo = array(
-		'Attribute' => array(
-			'className' => 'Attribute',
+		'Event' => array(
+			'className' => 'Event',
 			'foreignKey' => 'id',
 			'conditions' => '',
 			'fields' => '',

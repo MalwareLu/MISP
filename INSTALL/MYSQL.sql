@@ -7,32 +7,17 @@
 CREATE TABLE IF NOT EXISTS `attributes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `event_id` int(11) NOT NULL,
-  `type` varchar(100) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
   `category` varchar(255) COLLATE utf8_bin NOT NULL,
-  `value1` text COLLATE utf8_bin,
+  `type` varchar(100) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
+  `value1` text CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
+  `value2` text CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
   `to_ids` tinyint(1) NOT NULL DEFAULT '1',
   `uuid` varchar(40) COLLATE utf8_bin NOT NULL,
-  `revision` int(10) NOT NULL DEFAULT '0',
-  `private` tinyint(1) NOT NULL,
-  `cluster` tinyint(1) NOT NULL,
-  `communitie` tinyint(1) NOT NULL,
-  `value2` text COLLATE utf8_bin,
-  `dist_change` int(11) NOT NULL DEFAULT '0',
+  `timestamp` int(11) NOT NULL DEFAULT '0',
+  `distribution` tinyint(4) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `event_id` (`event_id`),
   KEY `uuid` (`uuid`)
-) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `blacklist`
---
-
-CREATE TABLE IF NOT EXISTS `blacklist` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(254) COLLATE utf8_bin NOT NULL,
-  PRIMARY KEY (`id`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 -- --------------------------------------------------------
@@ -50,12 +35,25 @@ CREATE TABLE IF NOT EXISTS `bruteforces` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `cake_sessions`
+--
+
+CREATE TABLE IF NOT EXISTS `cake_sessions` (
+  `id` varchar(255) COLLATE utf8_bin NOT NULL DEFAULT '',
+  `data` text COLLATE utf8_bin NOT NULL,
+  `expires` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `correlations`
 --
 
-CREATE TABLE `correlations` (
+CREATE TABLE IF NOT EXISTS `correlations` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `value` text COLLATE utf8_bin NOT NULL,
+  `value` text CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
   `1_event_id` int(11) NOT NULL,
   `1_attribute_id` int(11) NOT NULL,
   `1_private` tinyint(1) NOT NULL DEFAULT '0',
@@ -65,7 +63,10 @@ CREATE TABLE `correlations` (
   `private` tinyint(1) NOT NULL,
   `date` date NOT NULL,
   `info` text COLLATE utf8_bin NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `1_event_id` (`1_event_id`),
+  KEY `1_attribute_id` (`1_attribute_id`),
+  KEY `attribute_id` (`attribute_id`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 -- --------------------------------------------------------
 
@@ -80,18 +81,14 @@ CREATE TABLE IF NOT EXISTS `events` (
   `risk` enum('Undefined','Low','Medium','High') COLLATE utf8_bin NOT NULL,
   `info` text CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
   `user_id` int(11) NOT NULL,
-  `uuid` varchar(40) COLLATE utf8_bin NOT NULL,
-  `revision` tinyint(1) NOT NULL,
-  `private` tinyint(1) NOT NULL,
-  `cluster` tinyint(1) NOT NULL,
-  `communitie` tinyint(1) NOT NULL,
-  `attribute_count` int(11) NOT NULL,
-  `hop_count` int(11) NOT NULL DEFAULT '0',
   `published` tinyint(1) NOT NULL DEFAULT '0',
+  `uuid` varchar(40) COLLATE utf8_bin NOT NULL,
+  `attribute_count` int(11) NOT NULL,
   `analysis` tinyint(4) NOT NULL,
   `orgc` varchar(255) COLLATE utf8_bin NOT NULL,
-  `dist_change` int(11) NOT NULL DEFAULT '0',
-  `from` varchar(10) COLLATE utf8_bin NOT NULL,
+  `timestamp` int(11) NOT NULL DEFAULT '0',
+  `distribution` tinyint(4) NOT NULL DEFAULT '0',
+  `proposal_email_lock` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `uuid` (`uuid`),
   FULLTEXT KEY `info` (`info`)
@@ -128,6 +125,7 @@ CREATE TABLE IF NOT EXISTS `regexp` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `regexp` varchar(255) COLLATE utf8_bin NOT NULL,
   `replacement` varchar(255) COLLATE utf8_bin NOT NULL,
+  `type` varchar(100) COLLATE utf8_bin NOT NULL DEFAULT 'ALL',
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
@@ -139,7 +137,7 @@ CREATE TABLE IF NOT EXISTS `regexp` (
 
 CREATE TABLE IF NOT EXISTS `roles` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
+  `name` varchar(100) COLLATE utf8_bin NOT NULL,
   `created` datetime DEFAULT NULL,
   `modified` datetime DEFAULT NULL,
   `perm_add` tinyint(1) DEFAULT NULL,
@@ -152,7 +150,7 @@ CREATE TABLE IF NOT EXISTS `roles` (
   `perm_full` tinyint(1) DEFAULT NULL,
   `perm_auth` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB  DEFAULT CHARSET=latin1;
+) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 -- --------------------------------------------------------
 
@@ -195,7 +193,7 @@ CREATE TABLE IF NOT EXISTS `shadow_attributes` (
   KEY `event_id` (`event_id`),
   KEY `uuid` (`uuid`),
   KEY `old_id` (`old_id`)
-) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin AUTO_INCREMENT=11 ;
+) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 -- --------------------------------------------------------
 
 --
@@ -214,11 +212,12 @@ CREATE TABLE IF NOT EXISTS `users` (
   `nids_sid` int(15) NOT NULL,
   `termsaccepted` tinyint(1) NOT NULL,
   `newsread` date NOT NULL,
-  `role_id` int(11) DEFAULT NULL,
+  `role_id` int(11) NOT NULL,
   `change_pw` tinyint(4) NOT NULL,
   `contactalert` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `username` (`password`)
+  KEY `email` (`email`),
+  KEY `password` (`password`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 -- --------------------------------------------------------
@@ -239,7 +238,6 @@ CREATE TABLE IF NOT EXISTS `whitelist` (
 -- Default values for initial installation
 --
 
-INSERT INTO `users` (`id`,  `password`, `org`, `email`, `autoalert`, `authkey`, `invited_by`, `gpgkey`, `nids_sid`, `termsaccepted`, `newsread`, `role_id`, `change_pw`) VALUES(1, 'babc86e0869015b3f0b4d48ca48700d3a9d1b9d7', 'ADMIN', 'admin@admin.test', 0, 'vlf4o42bYSVVWLm28jLB85my4HBZWXTri8vGdySb', 1, '', 4000000, 0, '2012-03-13', '1', '1');
 INSERT INTO `regexp` 
   (`regexp`, `replacement`)
 VALUES 

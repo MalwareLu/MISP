@@ -34,9 +34,6 @@ echo $this->Form->input('reporter_organisation_id', array(
 );
 echo $this->Form->input('reporter_channel_id', array('options' => $channels));
 
-
-
-
 echo $this->Form->input('SharingGroup', array('multiple' => 'checkbox', 'div' => 'input clear'));
 
 /*echo $this->Form->input('risk', array(
@@ -56,14 +53,11 @@ echo $this->Form->input('analysis', array(
 echo $this->Form->input('assessment_level_id');
 
 if ('true' == Configure::read('CyDefSIG.sync')) {
-    if ('true' == Configure::read('CyDefSIG.private')) {
-        echo $this->Form->input('distribution', array('div' => 'input', 'label' => 'Distribution', 'selected' => 'Your organization only',
-            'between' => $this->Html->div('forminfo', '', array('id' => 'EventDistributionDiv'))
-        ));
-    } else {
-        echo $this->Form->input('private', array(
-        'before' => $this->Html->div('forminfo', isset($eventDescriptions['private']['formdesc']) ? $eventDescriptions['private']['formdesc'] : $eventDescriptions['private']['desc']),));
-    }
+    echo $this->Form->input('distribution', array(
+            'options' => array($distributionLevels),
+            'label' => 'Distribution',
+'selected' => '3',
+            ));
 }
 echo $this->Form->input('SharingAuthorisation', array('type' => 'text'));
 
@@ -73,17 +67,11 @@ echo $this->Form->input('report_notes', array('div' => 'clear', 'class' => 'inpu
 echo $this->Form->input('info', array('div' => 'clear', 'class' => 'input-xxlarge'));
 
 
-echo $this->Form->input('Event.submittedfile', array(
-        'label' => '<b>GFI sandbox</b>',
-        'between' => '<br />',
-        'type' => 'file',
-        'before' => $this->Html->div('forminfo', isset($eventDescriptions['submittedfile']['formdesc']) ? $eventDescriptions['submittedfile']['formdesc'] : $eventDescriptions['submittedfile']['desc'])));
-
-echo $this->Form->input('Event.submittedioc', array(
-    'label' => '<b>OpenIOC</b>',
-    'type' => 'file',
-    'div' => 'clear'
-));
+echo $this->Form->input('Event.submittedgfi', array(
+                'label' => '<b>GFI sandbox</b>',
+                'type' => 'file',
+                'div' => 'clear'
+                ));
 
 //echo $this->Form->input('AssessmentScope');
 
@@ -101,47 +89,64 @@ $this->Js->get('#EventAnalysis')->event('change', 'showFormInfo("#EventAnalysis"
 <?php echo $this->Form->button(__('Submit'), array('class' => 'btn btn-primary'));
 echo $this->Form->end();?>
 </div>
-<div class="actions">
-    <ul>
-        <?php echo $this->element('actions_menu'); ?>
-
-    </ul>
-</div>
+<?php echo $this->element('actions_menu'); ?>
 
 <script type="text/javascript">
 //
 //Generate tooltip information
 //
-var formInfoValues = new Array();
+var formInfoValues = {
+        'EventDistribution' : new Array(),
+        'EventRisk' : new Array(),
+        'EventAnalysis' : new Array()
+};
+
 <?php
 foreach ($distributionDescriptions as $type => $def) {
     $info = isset($def['formdesc']) ? $def['formdesc'] : $def['desc'];
-    echo "formInfoValues['" . addslashes($type) . "'] = \"" . addslashes($info) . "\";\n";  // as we output JS code we need to add slashes
+    echo "formInfoValues['EventDistribution']['" . addslashes($type) . "'] = \"" . addslashes($info) . "\";\n"; // as we output JS code we need to add slashes
 }
 foreach ($riskDescriptions as $type => $def) {
     $info = isset($def['formdesc']) ? $def['formdesc'] : $def['desc'];
-    echo "formInfoValues['" . addslashes($type) . "'] = \"" . addslashes($info) . "\";\n";  // as we output JS code we need to add slashes
+    echo "formInfoValues['EventRisk']['" . addslashes($type) . "'] = \"" . addslashes($info) . "\";\n"; // as we output JS code we need to add slashes
 }
 foreach ($analysisDescriptions as $type => $def) {
     $info = isset($def['formdesc']) ? $def['formdesc'] : $def['desc'];
-    echo "formInfoValues['" . addslashes($type) . "'] = \"" . addslashes($info) . "\";\n";  // as we output JS code we need to add slashes
+    echo "formInfoValues['EventAnalysis']['" . addslashes($type) . "'] = \"" . addslashes($info) . "\";\n"; // as we output JS code we need to add slashes
 }
 ?>
 
-function showFormInfo(id) {
-    idDiv = id+'Div';
-    // LATER use nice animations
-    //$(idDiv).hide('fast');
-    // change the content
-    var value = $(id).val();    // get the selected value
-    $(idDiv).html(formInfoValues[value]);    // search in a lookup table
-    // show it again
-    $(idDiv).fadeIn('slow');
-}
+$(document).ready(function() {
 
-// hide the formInfo things
-$('#EventDistributionDiv').hide();
-$('#EventRiskDiv').hide();
-$('#EventAnalysisDiv').hide();
+    $("#EventAnalysis, #EventRisk, #EventDistribution").on('mouseleave', function(e) {
+        $('#'+e.currentTarget.id).popover('destroy');
+    });
+
+    $("#EventAnalysis, #EventRisk, #EventDistribution").on('mouseover', function(e) {
+        var $e = $(e.target);
+        if ($e.is('option')) {
+            $('#'+e.currentTarget.id).popover('destroy');
+            $('#'+e.currentTarget.id).popover({
+                trigger: 'manual',
+                placement: 'right',
+                content: formInfoValues[e.currentTarget.id][$e.val()],
+            }).popover('show');
+        }
+    });
+
+    // workaround for browsers like IE and Chrome that do now have an onmouseover on the 'options' of a select.
+    // disadvangate is that user needs to click on the item to see the tooltip.
+    // no solutions exist, except to generate the select completely using html.
+    $("#EventAnalysis, #EventRisk, #EventDistribution").on('change', function(e) {
+        var $e = $(e.target);
+        $('#'+e.currentTarget.id).popover('destroy');
+        $('#'+e.currentTarget.id).popover({
+            trigger: 'manual',
+            placement: 'right',
+            content: formInfoValues[e.currentTarget.id][$e.val()],
+        }).popover('show');
+    });
+});
+
 </script>
 <?php echo $this->Js->writeBuffer();
