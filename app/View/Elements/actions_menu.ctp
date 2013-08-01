@@ -29,6 +29,7 @@ if(empty($may_publish)) $may_publish = false;
 			<?php } ?>
 			<li><a href="/events/contact/<?php echo $event_id;?>">Contact Reporter</a></li>
 			<li><?php echo $this->Html->link(__('Download as XML', true), array('action' => 'download', $event_id, 'ext' => 'xml')); ?></li>
+			<li><?php echo $this->Html->link(__('Download CSV', true), array('action' => 'download', $event_id, 'ext' => 'csv')); ?></li>
 			<?php if(!empty($cimbl_id)){?>
 		    <li><?php echo $this->Html->link(__('Download CIMBL XML', true), array('controller' => 'CIMBLs', 'action' => 'download', $cimbl_id, 'ext' => 'xml')); ?></li>
 		    <?php } ?>
